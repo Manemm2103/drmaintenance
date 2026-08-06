@@ -40,6 +40,7 @@ Der initiale Adminbenutzer wird beim ersten Start aus den `ADMIN_*` Variablen an
 ## API in Version 0.1
 
 - `GET /api/health`
+- `GET /api/version`
 - `GET /api/summary`
 - `GET /api/calendar`
 - `GET /api/properties`
@@ -56,6 +57,10 @@ Der initiale Adminbenutzer wird beim ersten Start aus den `ADMIN_*` Variablen an
 - `GET /api/work-orders`
 - `POST /api/work-orders`
 - `PATCH /api/work-orders/:id/status`
+
+## Versionierung
+
+Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.06.06`. Der letzte Block ist der Tageszaehler und wird bei jeder Aenderung am selben Tag um 1 erhoeht. Bei einem neuen Datum startet der Zaehler wieder bei `01`.
 
 ## Naechste sinnvolle Schritte
 

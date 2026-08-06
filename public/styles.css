@@ -116,13 +116,26 @@ button {
   background: var(--panel-soft);
 }
 
-.sidebar-status {
+.sidebar-footer {
   margin-top: auto;
+  display: grid;
+  gap: 10px;
+}
+
+.sidebar-status {
   display: flex;
   align-items: center;
   gap: 10px;
   color: var(--muted);
   font-size: 0.88rem;
+}
+
+.app-version {
+  color: var(--muted-2);
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .status-dot {
@@ -601,7 +614,7 @@ textarea {
     overflow-x: auto;
   }
 
-  .sidebar-status {
+  .sidebar-footer {
     margin-left: auto;
     margin-top: 0;
   }

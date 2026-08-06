@@ -1,6 +1,7 @@
 const path = require("path");
 const express = require("express");
 const db = require("./db");
+const { APP_VERSION } = require("./version");
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
@@ -27,9 +28,16 @@ app.get("/api/health", asyncRoute(async (_req, res) => {
   res.json({
     status: "ok",
     service: "drmaintenance",
+    version: APP_VERSION,
     database: "connected"
   });
 }));
+
+app.get("/api/version", (_req, res) => {
+  res.json({
+    version: APP_VERSION
+  });
+});
 
 app.get("/api/summary", asyncRoute(async (_req, res) => {
   res.json(await db.getDashboardSummary());

@@ -1,5 +1,6 @@
 const els = {
   connectionStatus: document.querySelector("#connectionStatus"),
+  appVersion: document.querySelector("#appVersion"),
   assetCount: document.querySelector("#assetCount"),
   planCount: document.querySelector("#planCount"),
   orderCount: document.querySelector("#orderCount"),
@@ -121,6 +122,15 @@ function showToast(message) {
 function setConnectionStatus(ok) {
   els.connectionStatus.textContent = ok ? "Datenbank verbunden" : "Keine Verbindung";
   document.querySelector(".status-dot").style.background = ok ? "#050505" : "#777777";
+}
+
+async function loadAppVersion() {
+  try {
+    const payload = await api("/api/version");
+    els.appVersion.textContent = `Version ${payload.version}`;
+  } catch (_error) {
+    els.appVersion.textContent = "Version unbekannt";
+  }
 }
 
 function renderSummary(payload) {
@@ -536,4 +546,5 @@ function bindEvents() {
 }
 
 bindEvents();
+loadAppVersion();
 loadDashboard();
