@@ -1,0 +1,63 @@
+# Portainer Stack fuer DR Maintenance
+#
+# Empfohlene Nutzung in Portainer:
+# 1. Stacks -> Add stack -> Repository
+# 2. Repository URL: https://github.com/Manemm2103/drmaintenance.git
+# 3. Compose path: docker-compose.portainer.yml
+# 4. Optional die Environment-Variablen unten in Portainer setzen.
+#
+# Wichtig: Wenn du diese Datei nur in den Portainer Web-Editor kopierst,
+# kann Portainer die Web-App nicht aus dem Dockerfile bauen, weil der
+# Build-Kontext fehlt. Nutze deshalb am besten die Repository-Variante.
+
+services:
+  drmaintenance-db:
+    image: mariadb:11.4
+    container_name: drmaintenance-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-change_this_root_password}
+      MARIADB_DATABASE: ${DB_NAME:-drmaintenance}
+      MARIADB_USER: ${DB_USER:-drmaintenance}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-change_this_password}
+    volumes:
+      - drmaintenance_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u$${MARIADB_USER} -p$${MARIADB_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 25s
+    networks:
+      - drmaintenance
+
+  drmaintenance-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: drmaintenance-web
+    restart: unless-stopped
+    depends_on:
+      drmaintenance-db:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      DB_HOST: drmaintenance-db
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-drmaintenance}
+      DB_USER: ${DB_USER:-drmaintenance}
+      DB_PASSWORD: ${DB_PASSWORD:-change_this_password}
+      DB_POOL_LIMIT: 10
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+    networks:
+      - drmaintenance
+
+volumes:
+  drmaintenance_db_data:
+    name: drmaintenance_db_data
+
+networks:
+  drmaintenance:
+    name: drmaintenance
+    driver: bridge

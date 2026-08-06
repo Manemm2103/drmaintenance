@@ -11,6 +11,21 @@ docker compose up --build
 
 Danach ist die App unter `http://localhost:3000` erreichbar.
 
+## Portainer
+
+In Portainer am besten einen Stack aus dem Git-Repository anlegen:
+
+- Repository URL: `https://github.com/Manemm2103/drmaintenance.git`
+- Compose path: `docker-compose.portainer.yml`
+- Environment:
+  - `WEB_PORT=3000`
+  - `DB_NAME=drmaintenance`
+  - `DB_USER=drmaintenance`
+  - `DB_PASSWORD=<sicheres-passwort>`
+  - `DB_ROOT_PASSWORD=<sicheres-root-passwort>`
+
+Die Web-App ist danach ueber `http://<server-ip>:3000` erreichbar.
+
 ## Container
 
 - `web`: Node.js/Express-App mit statischem Frontend und JSON API
