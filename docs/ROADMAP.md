@@ -1,22 +1,22 @@
 # Roadmap
 
-## Phase 1: Startfaehiges Grundsystem
+## Phase 1: Startfähiges Grundsystem
 
 - Docker Compose mit Web-App und MariaDB
 - Dashboard mit Kennzahlen
-- Anlagen, Wartungsplaene und Auftraege als erste Datenmodelle
-- Seed-Daten fuer den ersten Start
+- Anlagen, Wartungspläne und Aufträge als erste Datenmodelle
+- Seed-Daten für den ersten Start
 
 ## Phase 2: CMMS-Kern
 
-- CRUD-Masken fuer Anlagen, Plaene und Auftraege
-- Wiederkehrende Auftraege automatisch erzeugen
+- CRUD-Masken für Anlagen, Pläne und Aufträge
+- Wiederkehrende Aufträge automatisch erzeugen
 - Statusworkflow mit Verantwortlichen und Kommentaren
-- Suche, Filter, Prioritaeten und Faelligkeiten
+- Suche, Filter, Prioritäten und Fälligkeiten
 
 ## Phase 3: Betrieb
 
-- Login, Rollen und Mandantenfaehigkeit
-- Dateiablage fuer Anleitungen, Rechnungen und Pruefprotokolle
+- Login, Rollen und Mandantenfähigkeit
+- Dateiablage für Anleitungen, Rechnungen und Prüfprotokolle
 - Benachrichtigungen per E-Mail oder Chat
-- Export fuer Audits und Instandhaltungsberichte
+- Export für Audits und Instandhaltungsberichte

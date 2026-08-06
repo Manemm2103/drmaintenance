@@ -22,7 +22,7 @@
           <a href="#dashboard" class="active">Dashboard</a>
           <a href="#kalender">Kalender</a>
           <a href="#objekte">Objekte</a>
-          <a href="#auftraege">Auftraege</a>
+          <a href="#auftraege">Aufträge</a>
           <a href="#anlagen">Anlagen</a>
           <a href="#planung">Planung</a>
           <a href="#benutzer">Benutzer</a>
@@ -57,15 +57,15 @@
             <strong id="assetCount">-</strong>
           </article>
           <article class="metric-card">
-            <span>Aktive Plaene</span>
+            <span>Aktive Pläne</span>
             <strong id="planCount">-</strong>
           </article>
           <article class="metric-card">
-            <span>Offene Auftraege</span>
+            <span>Offene Aufträge</span>
             <strong id="orderCount">-</strong>
           </article>
           <article class="metric-card urgent">
-            <span>Ueberfaellig</span>
+            <span>Überfällig</span>
             <strong id="overdueCount">-</strong>
           </article>
           <article class="metric-card">
@@ -78,13 +78,13 @@
           <article class="panel full" id="kalender">
             <div class="panel-header">
               <div>
-                <p class="eyebrow">Faelligkeiten</p>
+                <p class="eyebrow">Fälligkeiten</p>
                 <h2>Wartungskalender</h2>
               </div>
               <div class="calendar-controls">
                 <button class="compact-button" type="button" id="prevMonthButton" aria-label="Vorheriger Monat">&lt;</button>
                 <strong id="calendarMonthLabel">Monat</strong>
-                <button class="compact-button" type="button" id="nextMonthButton" aria-label="Naechster Monat">&gt;</button>
+                <button class="compact-button" type="button" id="nextMonthButton" aria-label="Nächster Monat">&gt;</button>
               </div>
             </div>
             <div class="calendar-weekdays" aria-hidden="true">
@@ -109,12 +109,12 @@
             <form id="maintenanceForm" class="form-grid">
               <label>
                 Titel
-                <input name="title" placeholder="z.B. Rauchmelder pruefen" required>
+                <input name="title" placeholder="z.B. Rauchmelder prüfen" required>
               </label>
               <label>
                 Objekt
                 <select name="target" id="maintenanceTargetSelect" required>
-                  <option value="">Objekt auswaehlen</option>
+                  <option value="">Objekt auswählen</option>
                 </select>
               </label>
               <label>
@@ -122,7 +122,7 @@
                 <input name="intervalDays" type="number" min="1" value="365" required>
               </label>
               <label>
-                Faellig am
+                Fällig am
                 <input name="nextDueOn" id="maintenanceDueDate" type="date" required>
               </label>
               <button class="primary-button span-2" type="submit">Wartung speichern</button>
@@ -133,14 +133,14 @@
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Objekte</p>
-                <h2>Gebaeude und Appartments</h2>
+                <h2>Gebäude und Appartments</h2>
               </div>
             </div>
             <div class="property-layout">
               <div class="property-forms">
                 <form id="buildingForm" class="form-grid">
                   <label>
-                    Gebaeudename
+                    Gebäudename
                     <input name="name" placeholder="z.B. Wohnhaus Gartenblick" required>
                   </label>
                   <label>
@@ -154,16 +154,16 @@
                   </label>
                   <label class="span-2">
                     Adresse
-                    <input name="address" placeholder="Strasse, Ort">
+                    <input name="address" placeholder="Straße, Ort">
                   </label>
-                  <button class="primary-button span-2" type="submit">Gebaeude anlegen</button>
+                  <button class="primary-button span-2" type="submit">Gebäude anlegen</button>
                 </form>
 
                 <form id="apartmentForm" class="form-grid">
                   <label>
-                    Gebaeude
+                    Gebäude
                     <select name="buildingId" id="apartmentBuildingSelect" required>
-                      <option value="">Gebaeude auswaehlen</option>
+                      <option value="">Gebäude auswählen</option>
                     </select>
                   </label>
                   <label>
@@ -188,8 +188,8 @@
           <article class="panel wide" id="auftraege">
             <div class="panel-header">
               <div>
-                <p class="eyebrow">Prioritaet</p>
-                <h2>Naechste Auftraege</h2>
+                <p class="eyebrow">Priorität</p>
+                <h2>Nächste Aufträge</h2>
               </div>
               <button class="ghost-button" type="button" id="refreshButton">Aktualisieren</button>
             </div>
@@ -199,7 +199,7 @@
                   <tr>
                     <th>Auftrag</th>
                     <th>Anlage</th>
-                    <th>Faellig</th>
+                    <th>Fällig</th>
                     <th>Status</th>
                     <th>Prio</th>
                     <th></th>
@@ -233,7 +233,7 @@
                 </select>
               </label>
               <label>
-                Prioritaet
+                Priorität
                 <select name="priority">
                   <option value="medium">Mittel</option>
                   <option value="high">Hoch</option>
@@ -242,7 +242,7 @@
                 </select>
               </label>
               <label>
-                Faellig am
+                Fällig am
                 <input name="dueDate" type="date" required>
               </label>
               <label class="span-2">
@@ -267,7 +267,7 @@
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Planung</p>
-                <h2>Wartungsplaene</h2>
+                <h2>Wartungspläne</h2>
               </div>
             </div>
             <div class="plan-list" id="planList"></div>
@@ -317,7 +317,7 @@
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Historie</p>
-                <h2>Aktivitaeten</h2>
+                <h2>Aktivitäten</h2>
               </div>
             </div>
             <div class="timeline" id="activityList"></div>

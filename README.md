@@ -1,6 +1,6 @@
 # DR Maintenance
 
-DR Maintenance ist ein kleines, Docker-basiertes Grundgeruest fuer einen Wartungsplaner. Die App bringt eine Web-Oberflaeche, eine MariaDB-Datenbank, automatische Tabellenanlage und ein modernes Schwarz-Weiss-Dashboard mit.
+DR Maintenance ist ein kleines, Docker-basiertes Grundgerüst für einen Wartungsplaner. Die App bringt eine Web-Oberfläche, eine MariaDB-Datenbank, automatische Tabellenanlage und ein modernes Schwarz-Weiß-Dashboard mit.
 
 ## Start
 
@@ -29,11 +29,11 @@ In Portainer am besten einen Stack aus dem Git-Repository anlegen:
 - `ADMIN_EMAIL=admin@drmaintenance.local`
 - `COOKIE_SECURE=false`
 
-Die Web-App ist danach ueber `http://<server-ip>:3000` erreichbar.
+Die Web-App ist danach über `http://<server-ip>:3000` erreichbar.
 
-Der initiale Adminbenutzer wird beim ersten Start aus den `ADMIN_*` Variablen angelegt. Er ist ein Systembenutzer und kann in der App nicht veraendert oder geloescht werden. Wenn du die `ADMIN_*` Werte spaeter aenderst, wird ein bereits vorhandener Systemadmin nicht ueberschrieben.
+Der initiale Adminbenutzer wird beim ersten Start aus den `ADMIN_*` Variablen angelegt. Er ist ein Systembenutzer und kann in der App nicht verändert oder gelöscht werden. Wenn du die `ADMIN_*` Werte später änderst, wird ein bereits vorhandener Systemadmin nicht überschrieben.
 
-Ohne Login wird nur die Anmeldeseite ausgeliefert. Mit dem Haken `Angemeldet bleiben` setzt die App ein HTTP-only Cookie fuer 60 Tage. Ohne Haken ist es eine normale Browser-Session mit serverseitigem Ablauf.
+Ohne Login wird nur die Anmeldeseite ausgeliefert. Mit dem Haken `Angemeldet bleiben` setzt die App ein HTTP-only Cookie für 60 Tage. Ohne Haken ist es eine normale Browser-Session mit serverseitigem Ablauf.
 
 ## Container
 
@@ -66,12 +66,12 @@ Ohne Login wird nur die Anmeldeseite ausgeliefert. Mit dem Haken `Angemeldet ble
 
 ## Versionierung
 
-Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.06.06`. Der letzte Block ist der Tageszaehler und wird bei jeder Aenderung am selben Tag um 1 erhoeht. Bei einem neuen Datum startet der Zaehler wieder bei `01`.
+Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.06.08`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
 
-## Naechste sinnvolle Schritte
+## Nächste sinnvolle Schritte
 
 - Benutzerlogin und Rollen
-- Detailseiten fuer Gebaeude, Appartments und Anlagen
-- wiederkehrende Wartungsauftraege automatisch aus Plaenen erzeugen
+- Detailseiten für Gebäude, Appartments und Anlagen
+- wiederkehrende Wartungsaufträge automatisch aus Plänen erzeugen
 - Ersatzteile, Lieferanten und Kosten
 - Kalenderansicht und Benachrichtigungen

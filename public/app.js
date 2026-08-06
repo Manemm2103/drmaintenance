@@ -147,7 +147,7 @@ async function loadCurrentUser() {
     return;
   }
 
-  els.currentUser.textContent = `${payload.user.displayName} · ${roleLabels[payload.user.role] || payload.user.role}`;
+  els.currentUser.textContent = `${payload.user.displayName} - ${roleLabels[payload.user.role] || payload.user.role}`;
 }
 
 function renderSummary(payload) {
@@ -169,7 +169,7 @@ function renderSummary(payload) {
 
 function renderWorkOrders(workOrders) {
   if (workOrders.length === 0) {
-    els.workOrderRows.innerHTML = '<tr><td colspan="6">Keine offenen Auftraege.</td></tr>';
+    els.workOrderRows.innerHTML = '<tr><td colspan="6">Keine offenen Aufträge.</td></tr>';
     return;
   }
 
@@ -208,7 +208,7 @@ function renderAssets(assets) {
 
 function renderPlans(plans) {
   if (!plans || plans.length === 0) {
-    els.planList.innerHTML = '<div class="list-item">Keine Wartungsplaene.</div>';
+    els.planList.innerHTML = '<div class="list-item">Keine Wartungspläne.</div>';
     return;
   }
 
@@ -254,7 +254,7 @@ function renderUsers(users) {
       <div class="user-actions">
         ${Number(user.isSystem) === 1
           ? '<span class="system-note">Systemadmin</span>'
-          : `<button class="compact-button" type="button" title="Benutzer loeschen" aria-label="Benutzer loeschen" data-delete-user="${user.id}">X</button>`
+          : `<button class="compact-button" type="button" title="Benutzer löschen" aria-label="Benutzer löschen" data-delete-user="${user.id}">X</button>`
         }
       </div>
     </div>
@@ -276,11 +276,11 @@ function renderProperties(properties) {
         <div class="list-meta">
           <span>${buildingTypeLabels[building.buildingType] || building.buildingType}</span>
           <span>${escapeHtml(building.address || "Keine Adresse")}</span>
-          <span>${building.apartments.length === 0 ? "Als Wartungsobjekt verfuegbar" : `${building.apartments.length} Appartments`}</span>
+          <span>${building.apartments.length === 0 ? "Als Wartungsobjekt verfügbar" : `${building.apartments.length} Appartments`}</span>
         </div>
       </div>
       ${building.apartments.length === 0
-        ? '<span class="badge light">Gebaeude ohne Appartments</span>'
+        ? '<span class="badge light">Gebäude ohne Appartments</span>'
         : `<div class="apartment-list">
             ${building.apartments.map((apartment) => `
               <div class="apartment-chip">
@@ -353,7 +353,7 @@ function renderAssetOptions(assets) {
 
 function renderApartmentBuildingOptions(properties) {
   const currentValue = els.apartmentBuildingSelect.value;
-  els.apartmentBuildingSelect.innerHTML = '<option value="">Gebaeude auswaehlen</option>' + properties.map((building) => (
+  els.apartmentBuildingSelect.innerHTML = '<option value="">Gebäude auswählen</option>' + properties.map((building) => (
     `<option value="${building.id}">${escapeHtml(building.name)}</option>`
   )).join("");
   els.apartmentBuildingSelect.value = currentValue;
@@ -361,7 +361,7 @@ function renderApartmentBuildingOptions(properties) {
 
 function renderMaintenanceTargetOptions(targets) {
   const currentValue = els.maintenanceTargetSelect.value;
-  els.maintenanceTargetSelect.innerHTML = '<option value="">Objekt auswaehlen</option>' + targets.map((target) => (
+  els.maintenanceTargetSelect.innerHTML = '<option value="">Objekt auswählen</option>' + targets.map((target) => (
     `<option value="${target.targetType}:${target.targetId}">${escapeHtml(target.label)} - ${escapeHtml(target.subtitle || "")}</option>`
   )).join("");
   els.maintenanceTargetSelect.value = currentValue;
@@ -410,7 +410,7 @@ async function deleteUser(id) {
   await api(`/api/users/${id}`, {
     method: "DELETE"
   });
-  showToast("Benutzer geloescht.");
+  showToast("Benutzer gelöscht.");
   await loadDashboard();
 }
 
@@ -425,7 +425,7 @@ async function logout() {
 function setMaintenanceDate(dateKey) {
   els.maintenanceDueDate.value = dateKey;
   document.querySelector("#new-maintenance").scrollIntoView({ behavior: "smooth" });
-  showToast(`Wartung fuer ${formatDate(dateKey)} vorbereiten.`);
+  showToast(`Wartung für ${formatDate(dateKey)} vorbereiten.`);
 }
 
 function parseTargetValue(value) {
@@ -529,7 +529,7 @@ function bindEvents() {
     });
 
     els.buildingForm.reset();
-    showToast("Gebaeude angelegt.");
+    showToast("Gebäude angelegt.");
     await loadDashboard();
   });
 

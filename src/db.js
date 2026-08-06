@@ -178,6 +178,7 @@ async function runMigrations() {
   await cleanupExpiredSessions();
   await seedPropertyData();
   await seedInitialData();
+  await normalizeGermanText();
 }
 
 function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
@@ -268,9 +269,9 @@ async function seedInitialData() {
       INSERT INTO assets (name, asset_type, location, serial_number, criticality)
       VALUES
         ('Heizkreis Verteiler EG', 'HVAC', 'Technikraum EG', 'HVAC-EG-001', 'high'),
-        ('Torsteuerung Lager', 'Gebaeudetechnik', 'Lagerhalle', 'TOR-LAG-024', 'medium'),
+        ('Torsteuerung Lager', 'Gebäudetechnik', 'Lagerhalle', 'TOR-LAG-024', 'medium'),
         ('PV Wechselrichter 1', 'Energie', 'Dachzentrale', 'PV-WR-001', 'critical'),
-        ('Wasserentharter', 'Sanitaer', 'Technikraum UG', 'SAN-WE-004', 'medium')
+        ('Wasserentharter', 'Sanitär', 'Technikraum UG', 'SAN-WE-004', 'medium')
     `
   );
 
@@ -278,10 +279,10 @@ async function seedInitialData() {
     `
       INSERT INTO maintenance_plans (asset_id, title, interval_days, last_done_on, next_due_on)
       VALUES
-        (?, 'Filter und Pumpengruppe pruefen', 90, CURDATE() - INTERVAL 70 DAY, CURDATE() + INTERVAL 20 DAY),
+        (?, 'Filter und Pumpengruppe prüfen', 90, CURDATE() - INTERVAL 70 DAY, CURDATE() + INTERVAL 20 DAY),
         (?, 'Sicherheitsabschaltung testen', 180, CURDATE() - INTERVAL 150 DAY, CURDATE() + INTERVAL 30 DAY),
-        (?, 'Ertragsdaten und Luefter pruefen', 60, CURDATE() - INTERVAL 65 DAY, CURDATE() - INTERVAL 5 DAY),
-        (?, 'Salzstand und Harzspuelung pruefen', 45, CURDATE() - INTERVAL 35 DAY, CURDATE() + INTERVAL 10 DAY)
+        (?, 'Ertragsdaten und Lüfter prüfen', 60, CURDATE() - INTERVAL 65 DAY, CURDATE() - INTERVAL 5 DAY),
+        (?, 'Salzstand und Harzspülung prüfen', 45, CURDATE() - INTERVAL 35 DAY, CURDATE() + INTERVAL 10 DAY)
     `,
     [
       assetResult.insertId,
@@ -295,9 +296,9 @@ async function seedInitialData() {
     `
       INSERT INTO work_orders (asset_id, title, description, priority, status, due_date)
       VALUES
-        (?, 'PV Wechselrichter Wartung ueberfaellig', 'Luefter reinigen und Fehlerhistorie pruefen.', 'critical', 'open', CURDATE() - INTERVAL 5 DAY),
-        (?, 'Wasserentharter Service vorbereiten', 'Salzbestand auffuellen, Wasserhaerte messen.', 'medium', 'planned', CURDATE() + INTERVAL 10 DAY),
-        (?, 'Torsteuerung Sichtpruefung', 'Lichtschranken und Not-Aus testen.', 'medium', 'in_progress', CURDATE() + INTERVAL 3 DAY)
+        (?, 'PV Wechselrichter Wartung überfällig', 'Lüfter reinigen und Fehlerhistorie prüfen.', 'critical', 'open', CURDATE() - INTERVAL 5 DAY),
+        (?, 'Wasserentharter Service vorbereiten', 'Salzbestand auffüllen, Wasserhärte messen.', 'medium', 'planned', CURDATE() + INTERVAL 10 DAY),
+        (?, 'Torsteuerung Sichtprüfung', 'Lichtschranken und Not-Aus testen.', 'medium', 'in_progress', CURDATE() + INTERVAL 3 DAY)
     `,
     [
       assetResult.insertId + 2,
@@ -310,7 +311,7 @@ async function seedInitialData() {
     `
       INSERT INTO activity_log (entity_type, entity_id, message)
       VALUES
-        ('system', 1, 'Startdaten fuer DR Maintenance angelegt.'),
+        ('system', 1, 'Startdaten für DR Maintenance angelegt.'),
         ('work_order', 1, 'Erster kritischer Auftrag erstellt.'),
         ('asset', 3, 'PV Wechselrichter als kritisch markiert.')
     `
@@ -327,7 +328,7 @@ async function seedPropertyData() {
     `
       INSERT INTO buildings (name, address, building_type, notes)
       VALUES
-        ('DR Home Privathaus', 'Musterstrasse 12', 'private_house', 'Einzelobjekt ohne Appartments.'),
+        ('DR Home Privathaus', 'Musterstraße 12', 'private_house', 'Einzelobjekt ohne Appartments.'),
         ('Wohnhaus Gartenblick', 'Gartenweg 8', 'multi_family', 'Mehrparteienhaus mit Appartments.')
     `
   );
@@ -349,16 +350,65 @@ async function seedPropertyData() {
     `
       INSERT INTO maintenance_plans (asset_id, target_type, target_id, title, interval_days, last_done_on, next_due_on)
       VALUES
-        (NULL, 'building', ?, 'Dachrinne und Aussenbereich pruefen', 180, CURDATE() - INTERVAL 120 DAY, CURDATE() + INTERVAL 60 DAY),
-        (NULL, 'apartment', ?, 'Rauchmelder und Fenster pruefen', 365, CURDATE() - INTERVAL 330 DAY, CURDATE() + INTERVAL 35 DAY)
+        (NULL, 'building', ?, 'Dachrinne und Außenbereich prüfen', 180, CURDATE() - INTERVAL 120 DAY, CURDATE() + INTERVAL 60 DAY),
+        (NULL, 'apartment', ?, 'Rauchmelder und Fenster prüfen', 365, CURDATE() - INTERVAL 330 DAY, CURDATE() + INTERVAL 35 DAY)
     `,
     [privateHouseId, apartmentResult.insertId]
   );
 
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('building', ?, ?)",
-    [privateHouseId, "Beispiel-Gebaeude und Appartments angelegt."]
+    [privateHouseId, "Beispiel-Gebäude und Appartments angelegt."]
   );
+}
+
+async function normalizeGermanText() {
+  const replacements = [
+    ["Auftraege", "Aufträge"],
+    ["Wartungsplaene", "Wartungspläne"],
+    ["Plaene", "Pläne"],
+    ["Gebaeudetechnik", "Gebäudetechnik"],
+    ["Gebaeude", "Gebäude"],
+    ["Sanitaer", "Sanitär"],
+    ["pruefen", "prüfen"],
+    ["Luefter", "Lüfter"],
+    ["ueberfaellig", "überfällig"],
+    ["auffuellen", "auffüllen"],
+    ["Wasserhaerte", "Wasserhärte"],
+    ["Sichtpruefung", "Sichtprüfung"],
+    ["fuer", "für"],
+    ["Aussenbereich", "Außenbereich"],
+    ["Strasse", "Straße"],
+    ["geloescht", "gelöscht"],
+    ["veraendert", "verändert"],
+    ["Faelligkeit", "Fälligkeit"],
+    ["koennen", "können"]
+  ];
+
+  const columns = [
+    ["assets", "name"],
+    ["assets", "asset_type"],
+    ["assets", "location"],
+    ["maintenance_plans", "title"],
+    ["work_orders", "title"],
+    ["work_orders", "description"],
+    ["activity_log", "message"],
+    ["buildings", "name"],
+    ["buildings", "address"],
+    ["buildings", "notes"],
+    ["apartments", "name"],
+    ["apartments", "floor"],
+    ["apartments", "notes"]
+  ];
+
+  for (const [table, column] of columns) {
+    for (const [from, to] of replacements) {
+      await pool.execute(
+        `UPDATE ${table} SET ${column} = REPLACE(${column}, ?, ?) WHERE ${column} LIKE ?`,
+        [from, to, `%${from}%`]
+      );
+    }
+  }
 }
 
 async function getDashboardSummary() {
@@ -457,7 +507,7 @@ function createError(message, statusCode) {
 
 function assertValidRole(role) {
   if (!allowedRoles.has(role)) {
-    throw createError("Ungueltige Benutzerrolle.", 400);
+    throw createError("Ungültige Benutzerrolle.", 400);
   }
 }
 
@@ -655,7 +705,7 @@ async function updateUser(id, input) {
   }
 
   if (existingUser.isSystem) {
-    throw createError("Der initiale Adminbenutzer kann nicht veraendert werden.", 403);
+    throw createError("Der initiale Adminbenutzer kann nicht verändert werden.", 403);
   }
 
   const updates = [];
@@ -722,13 +772,13 @@ async function deleteUser(id) {
   }
 
   if (existingUser.isSystem) {
-    throw createError("Der initiale Adminbenutzer kann nicht geloescht werden.", 403);
+    throw createError("Der initiale Adminbenutzer kann nicht gelöscht werden.", 403);
   }
 
   await pool.execute("DELETE FROM users WHERE id = ?", [id]);
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('user', ?, ?)",
-    [id, `Benutzer "${existingUser.username}" geloescht.`]
+    [id, `Benutzer "${existingUser.username}" gelöscht.`]
   );
 
   return { deleted: true };
@@ -777,13 +827,13 @@ async function listProperties() {
 async function createBuilding(input) {
   const name = input.name?.trim();
   if (!name) {
-    throw createError("Gebaeudename ist ein Pflichtfeld.", 400);
+    throw createError("Gebäudename ist ein Pflichtfeld.", 400);
   }
 
   const buildingType = input.buildingType || "private_house";
   const allowedTypes = new Set(["private_house", "multi_family", "commercial", "other"]);
   if (!allowedTypes.has(buildingType)) {
-    throw createError("Ungueltiger Gebaeudetyp.", 400);
+    throw createError("Ungültiger Gebäudetyp.", 400);
   }
 
   const [result] = await pool.execute(
@@ -801,7 +851,7 @@ async function createBuilding(input) {
 
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('building', ?, ?)",
-    [result.insertId, `Gebaeude "${name}" angelegt.`]
+    [result.insertId, `Gebäude "${name}" angelegt.`]
   );
 
   return getBuildingById(result.insertId);
@@ -830,7 +880,7 @@ async function createApartment(input) {
   const name = input.name?.trim();
 
   if (!buildingId || !apartmentNumber || !name) {
-    throw createError("Gebaeude, Appartment-Nummer und Name sind Pflichtfelder.", 400);
+    throw createError("Gebäude, Appartment-Nummer und Name sind Pflichtfelder.", 400);
   }
 
   try {
@@ -856,11 +906,11 @@ async function createApartment(input) {
     return getApartmentById(result.insertId);
   } catch (error) {
     if (error.code === "ER_DUP_ENTRY") {
-      throw createError("Dieses Appartment existiert in dem Gebaeude bereits.", 409);
+      throw createError("Dieses Appartment existiert in dem Gebäude bereits.", 409);
     }
 
     if (error.code === "ER_NO_REFERENCED_ROW_2") {
-      throw createError("Das ausgewaehlte Gebaeude existiert nicht.", 400);
+      throw createError("Das ausgewählte Gebäude existiert nicht.", 400);
     }
 
     throw error;
@@ -904,7 +954,7 @@ async function listMaintenanceTargets() {
         'building' AS targetType,
         b.id AS targetId,
         b.name AS label,
-        COALESCE(b.address, 'Gebaeude ohne Appartments') AS subtitle,
+        COALESCE(b.address, 'Gebäude ohne Appartments') AS subtitle,
         2 AS sortOrder
       FROM buildings b
       WHERE NOT EXISTS (
@@ -931,7 +981,7 @@ async function listMaintenanceTargets() {
 
 async function assertMaintenanceTarget(targetType, targetId) {
   if (!["asset", "building", "apartment"].includes(targetType)) {
-    throw createError("Ungueltiges Wartungsziel.", 400);
+    throw createError("Ungültiges Wartungsziel.", 400);
   }
 
   if (targetType === "asset") {
@@ -962,11 +1012,11 @@ async function assertMaintenanceTarget(targetType, targetId) {
   );
 
   if (!building) {
-    throw createError("Das ausgewaehlte Gebaeude existiert nicht.", 400);
+    throw createError("Das ausgewählte Gebäude existiert nicht.", 400);
   }
 
   if (building.apartmentCount > 0) {
-    throw createError("Gebaeude mit Appartments koennen nicht direkt als Wartungsziel genutzt werden.", 400);
+    throw createError("Gebäude mit Appartments können nicht direkt als Wartungsziel genutzt werden.", 400);
   }
 }
 
@@ -977,7 +1027,7 @@ async function createMaintenancePlan(input) {
   const intervalDays = Number(input.intervalDays);
 
   if (!title || !targetType || !targetId || !intervalDays || !input.nextDueOn) {
-    throw createError("Titel, Objekt, Intervall und Faelligkeit sind Pflichtfelder.", 400);
+    throw createError("Titel, Objekt, Intervall und Fälligkeit sind Pflichtfelder.", 400);
   }
 
   if (intervalDays < 1) {
@@ -1187,7 +1237,7 @@ async function getWorkOrderById(id) {
 async function updateWorkOrderStatus(id, status) {
   const allowedStatuses = new Set(["open", "planned", "in_progress", "done"]);
   if (!allowedStatuses.has(status)) {
-    const error = new Error("Ungueltiger Status.");
+    const error = new Error("Ungültiger Status.");
     error.statusCode = 400;
     throw error;
   }
