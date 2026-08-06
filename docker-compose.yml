@@ -1,0 +1,39 @@
+services:
+  db:
+    image: mariadb:11.4
+    container_name: drmaintenance-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-drmaintenance_root}
+      MARIADB_DATABASE: ${DB_NAME:-drmaintenance}
+      MARIADB_USER: ${DB_USER:-drmaintenance}
+      MARIADB_PASSWORD: ${DB_PASSWORD:-drmaintenance}
+    volumes:
+      - db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mariadb-admin ping -h 127.0.0.1 -u$${MARIADB_USER} -p$${MARIADB_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 25s
+
+  web:
+    build: .
+    container_name: drmaintenance-web
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${DB_NAME:-drmaintenance}
+      DB_USER: ${DB_USER:-drmaintenance}
+      DB_PASSWORD: ${DB_PASSWORD:-drmaintenance}
+      DB_POOL_LIMIT: 10
+    ports:
+      - "${WEB_PORT:-3000}:3000"
+
+volumes:
+  db_data:

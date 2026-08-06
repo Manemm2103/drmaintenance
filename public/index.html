@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DR Maintenance</title>
+    <meta name="description" content="DR Maintenance Wartungsplaner">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="shell">
+      <aside class="sidebar" aria-label="Hauptnavigation">
+        <a class="brand" href="/" aria-label="DR Maintenance Dashboard">
+          <img src="/logo.png" alt="DR HOME Logo" class="brand-logo">
+          <span>
+            <strong>DR</strong>
+            <small>Maintenance</small>
+          </span>
+        </a>
+
+        <nav class="nav">
+          <a href="#dashboard" class="active">Dashboard</a>
+          <a href="#auftraege">Auftraege</a>
+          <a href="#anlagen">Anlagen</a>
+          <a href="#planung">Planung</a>
+        </nav>
+
+        <div class="sidebar-status">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="connectionStatus">Verbinde...</span>
+        </div>
+      </aside>
+
+      <main class="main" id="dashboard">
+        <header class="topbar">
+          <div>
+            <p class="eyebrow">Wartungsplaner</p>
+            <h1>Alles Wichtige auf einen Blick.</h1>
+          </div>
+          <button class="primary-button" type="button" data-scroll-target="new-work-order" title="Neuen Auftrag erfassen">
+            <span aria-hidden="true">+</span>
+            Auftrag
+          </button>
+        </header>
+
+        <section class="kpi-grid" aria-label="Kennzahlen">
+          <article class="metric-card">
+            <span>Anlagen</span>
+            <strong id="assetCount">-</strong>
+          </article>
+          <article class="metric-card">
+            <span>Aktive Plaene</span>
+            <strong id="planCount">-</strong>
+          </article>
+          <article class="metric-card">
+            <span>Offene Auftraege</span>
+            <strong id="orderCount">-</strong>
+          </article>
+          <article class="metric-card urgent">
+            <span>Ueberfaellig</span>
+            <strong id="overdueCount">-</strong>
+          </article>
+        </section>
+
+        <section class="workspace-grid">
+          <article class="panel wide" id="auftraege">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Prioritaet</p>
+                <h2>Naechste Auftraege</h2>
+              </div>
+              <button class="ghost-button" type="button" id="refreshButton">Aktualisieren</button>
+            </div>
+            <div class="table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Auftrag</th>
+                    <th>Anlage</th>
+                    <th>Faellig</th>
+                    <th>Status</th>
+                    <th>Prio</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="workOrderRows">
+                  <tr>
+                    <td colspan="6">Daten werden geladen...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="panel" id="new-work-order">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Schnellerfassung</p>
+                <h2>Auftrag anlegen</h2>
+              </div>
+            </div>
+            <form id="workOrderForm" class="form-grid">
+              <label>
+                Titel
+                <input name="title" placeholder="z.B. Filter wechseln" required>
+              </label>
+              <label>
+                Anlage
+                <select name="assetId" id="assetSelect">
+                  <option value="">Ohne Anlage</option>
+                </select>
+              </label>
+              <label>
+                Prioritaet
+                <select name="priority">
+                  <option value="medium">Mittel</option>
+                  <option value="high">Hoch</option>
+                  <option value="critical">Kritisch</option>
+                  <option value="low">Niedrig</option>
+                </select>
+              </label>
+              <label>
+                Faellig am
+                <input name="dueDate" type="date" required>
+              </label>
+              <label class="span-2">
+                Beschreibung
+                <textarea name="description" rows="4" placeholder="Kurze Arbeitsbeschreibung"></textarea>
+              </label>
+              <button class="primary-button span-2" type="submit">Auftrag speichern</button>
+            </form>
+          </article>
+
+          <article class="panel" id="anlagen">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Inventar</p>
+                <h2>Anlagen</h2>
+              </div>
+            </div>
+            <div class="asset-list" id="assetList"></div>
+          </article>
+
+          <article class="panel" id="planung">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Planung</p>
+                <h2>Wartungsplaene</h2>
+              </div>
+            </div>
+            <div class="plan-list" id="planList"></div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Historie</p>
+                <h2>Aktivitaeten</h2>
+              </div>
+            </div>
+            <div class="timeline" id="activityList"></div>
+          </article>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/app.js"></script>
+  </body>
+</html>
