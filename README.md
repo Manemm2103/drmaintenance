@@ -70,7 +70,7 @@ Ohne Login wird nur die Anmeldeseite ausgeliefert. Mit dem Haken `Angemeldet ble
 
 ## Versionierung
 
-Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.06.11`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
+Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.06.12`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
 
 ## Nächste sinnvolle Schritte
 
@@ -78,4 +78,4 @@ Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.06.11`. D
 - Detailseiten für Gebäude, Appartments und Wartungsobjekte
 - wiederkehrende Wartungsaufträge automatisch aus Plänen erzeugen
 - Ersatzteile, Lieferanten und Kosten
-- Kalenderansicht und Benachrichtigungen
+- Benachrichtigungen

@@ -195,13 +195,14 @@ function scrollToTarget(targetId) {
 function setView(viewName, options = {}) {
   const nextView = viewConfig[viewName] ? viewName : "dashboard";
   const config = viewConfig[nextView];
+  const activeNav = options.activeNav || nextView;
 
   els.views.forEach((view) => {
     view.classList.toggle("is-active", view.dataset.view === nextView);
   });
 
   els.viewLinks.forEach((link) => {
-    link.classList.toggle("active", link.dataset.viewLink === nextView);
+    link.classList.toggle("active", (link.dataset.navKey || link.dataset.viewLink) === activeNav);
   });
 
   els.pageEyebrow.textContent = config.eyebrow;
@@ -211,8 +212,9 @@ function setView(viewName, options = {}) {
   els.pageAction.dataset.viewTarget = config.actionView;
   els.pageAction.dataset.scrollTarget = config.scrollTarget;
 
-  if (options.updateHash !== false && window.location.hash !== `#${nextView}`) {
-    window.history.pushState(null, "", `#${nextView}`);
+  const hashTarget = options.hashTarget || nextView;
+  if (options.updateHash !== false && window.location.hash !== `#${hashTarget}`) {
+    window.history.pushState(null, "", `#${hashTarget}`);
   }
 
   if (options.scrollTop !== false) {
@@ -223,7 +225,8 @@ function setView(viewName, options = {}) {
 function showViewFromHash() {
   const hash = decodeURIComponent(window.location.hash.replace(/^#/, ""));
   const viewName = hashViewMap[hash] || "dashboard";
-  setView(viewName, { updateHash: false, scrollTop: false });
+  const activeNav = hash === "kalender" ? "kalender" : viewName;
+  setView(viewName, { updateHash: false, scrollTop: false, activeNav });
 
   if (hash && hash !== viewName && hashViewMap[hash]) {
     window.setTimeout(() => scrollToTarget(hash), 0);
@@ -611,7 +614,18 @@ function bindEvents() {
   els.viewLinks.forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
-      setView(link.dataset.viewLink, { updateHash: true });
+      event.stopPropagation();
+
+      const hashTarget = link.getAttribute("href")?.replace(/^#/, "") || link.dataset.viewLink;
+      setView(link.dataset.viewLink, {
+        updateHash: true,
+        activeNav: link.dataset.navKey || link.dataset.viewLink,
+        hashTarget
+      });
+
+      if (link.dataset.scrollTarget) {
+        window.setTimeout(() => scrollToTarget(link.dataset.scrollTarget), 0);
+      }
     });
   });
 
