@@ -10,9 +10,20 @@ const els = {
   planList: document.querySelector("#planList"),
   activityList: document.querySelector("#activityList"),
   userList: document.querySelector("#userList"),
+  propertyList: document.querySelector("#propertyList"),
   assetSelect: document.querySelector("#assetSelect"),
+  apartmentBuildingSelect: document.querySelector("#apartmentBuildingSelect"),
+  maintenanceTargetSelect: document.querySelector("#maintenanceTargetSelect"),
+  maintenanceDueDate: document.querySelector("#maintenanceDueDate"),
+  calendarGrid: document.querySelector("#calendarGrid"),
+  calendarMonthLabel: document.querySelector("#calendarMonthLabel"),
+  prevMonthButton: document.querySelector("#prevMonthButton"),
+  nextMonthButton: document.querySelector("#nextMonthButton"),
   refreshButton: document.querySelector("#refreshButton"),
   workOrderForm: document.querySelector("#workOrderForm"),
+  maintenanceForm: document.querySelector("#maintenanceForm"),
+  buildingForm: document.querySelector("#buildingForm"),
+  apartmentForm: document.querySelector("#apartmentForm"),
   userForm: document.querySelector("#userForm"),
   toast: document.querySelector("#toast")
 };
@@ -37,6 +48,15 @@ const roleLabels = {
   technician: "Techniker",
   viewer: "Leser"
 };
+
+const buildingTypeLabels = {
+  private_house: "Privathaus",
+  multi_family: "Mehrfamilienhaus",
+  commercial: "Gewerbe",
+  other: "Sonstiges"
+};
+
+let visibleMonth = startOfMonth(new Date());
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -65,6 +85,31 @@ function formatDate(value) {
     month: "2-digit",
     year: "numeric"
   }).format(new Date(value));
+}
+
+function toDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function startOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function addMonths(date, amount) {
+  return new Date(date.getFullYear(), date.getMonth() + amount, 1);
+}
+
+function getCalendarRange() {
+  const start = startOfMonth(visibleMonth);
+  const end = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0);
+
+  return {
+    start: toDateKey(start),
+    end: toDateKey(end)
+  };
 }
 
 function showToast(message) {
@@ -135,11 +180,17 @@ function renderAssets(assets) {
 }
 
 function renderPlans(plans) {
+  if (!plans || plans.length === 0) {
+    els.planList.innerHTML = '<div class="list-item">Keine Wartungsplaene.</div>';
+    return;
+  }
+
   els.planList.innerHTML = plans.map((plan) => `
     <div class="list-item">
       <strong>${escapeHtml(plan.title)}</strong>
       <div class="list-meta">
-        <span>${escapeHtml(plan.assetName)}</span>
+        <span>${escapeHtml(plan.targetName || "Kein Objekt")}</span>
+        <span>${escapeHtml(plan.targetSubtitle || "")}</span>
         <span>${formatDate(plan.nextDueOn)}</span>
         <span>${plan.intervalDays} Tage</span>
       </div>
@@ -183,12 +234,110 @@ function renderUsers(users) {
   `).join("");
 }
 
+function renderProperties(properties) {
+  renderApartmentBuildingOptions(properties);
+
+  if (!properties || properties.length === 0) {
+    els.propertyList.innerHTML = '<div class="list-item">Keine Objekte angelegt.</div>';
+    return;
+  }
+
+  els.propertyList.innerHTML = properties.map((building) => `
+    <div class="property-card">
+      <div>
+        <strong>${escapeHtml(building.name)}</strong>
+        <div class="list-meta">
+          <span>${buildingTypeLabels[building.buildingType] || building.buildingType}</span>
+          <span>${escapeHtml(building.address || "Keine Adresse")}</span>
+          <span>${building.apartments.length === 0 ? "Als Wartungsobjekt verfuegbar" : `${building.apartments.length} Appartments`}</span>
+        </div>
+      </div>
+      ${building.apartments.length === 0
+        ? '<span class="badge light">Gebaeude ohne Appartments</span>'
+        : `<div class="apartment-list">
+            ${building.apartments.map((apartment) => `
+              <div class="apartment-chip">
+                <span>${escapeHtml(apartment.name)}</span>
+                <span class="muted">${escapeHtml(apartment.apartmentNumber)}${apartment.floor ? ` - ${escapeHtml(apartment.floor)}` : ""}</span>
+              </div>
+            `).join("")}
+          </div>`
+      }
+    </div>
+  `).join("");
+}
+
+function renderCalendar(events) {
+  const monthLabel = new Intl.DateTimeFormat("de-DE", {
+    month: "long",
+    year: "numeric"
+  }).format(visibleMonth);
+  els.calendarMonthLabel.textContent = monthLabel;
+
+  const daysInMonth = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate();
+  const firstDay = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1);
+  const leadingEmptyDays = (firstDay.getDay() + 6) % 7;
+  const todayKey = toDateKey(new Date());
+  const eventsByDate = groupEventsByDate(events);
+  const cells = [];
+
+  for (let index = 0; index < leadingEmptyDays; index += 1) {
+    cells.push('<div class="calendar-day is-empty"></div>');
+  }
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), day);
+    const dateKey = toDateKey(date);
+    const dayEvents = eventsByDate.get(dateKey) || [];
+
+    cells.push(`
+      <button class="calendar-day ${dateKey === todayKey ? "is-today" : ""}" type="button" data-calendar-day="${dateKey}">
+        <span class="calendar-date">${day}</span>
+        ${dayEvents.slice(0, 3).map((event) => `
+          <span class="calendar-event" title="${escapeHtml(event.title)}">
+            ${escapeHtml(event.title)}
+            <small>${escapeHtml(event.targetName || "Kein Objekt")}</small>
+          </span>
+        `).join("")}
+        ${dayEvents.length > 3 ? `<span class="muted">+${dayEvents.length - 3} weitere</span>` : ""}
+      </button>
+    `);
+  }
+
+  els.calendarGrid.innerHTML = cells.join("");
+}
+
+function groupEventsByDate(events) {
+  return events.reduce((groups, event) => {
+    const list = groups.get(event.dueDate) || [];
+    list.push(event);
+    groups.set(event.dueDate, list);
+    return groups;
+  }, new Map());
+}
+
 function renderAssetOptions(assets) {
   const currentValue = els.assetSelect.value;
   els.assetSelect.innerHTML = '<option value="">Ohne Anlage</option>' + assets.map((asset) => (
     `<option value="${asset.id}">${escapeHtml(asset.name)}</option>`
   )).join("");
   els.assetSelect.value = currentValue;
+}
+
+function renderApartmentBuildingOptions(properties) {
+  const currentValue = els.apartmentBuildingSelect.value;
+  els.apartmentBuildingSelect.innerHTML = '<option value="">Gebaeude auswaehlen</option>' + properties.map((building) => (
+    `<option value="${building.id}">${escapeHtml(building.name)}</option>`
+  )).join("");
+  els.apartmentBuildingSelect.value = currentValue;
+}
+
+function renderMaintenanceTargetOptions(targets) {
+  const currentValue = els.maintenanceTargetSelect.value;
+  els.maintenanceTargetSelect.innerHTML = '<option value="">Objekt auswaehlen</option>' + targets.map((target) => (
+    `<option value="${target.targetType}:${target.targetId}">${escapeHtml(target.label)} - ${escapeHtml(target.subtitle || "")}</option>`
+  )).join("");
+  els.maintenanceTargetSelect.value = currentValue;
 }
 
 function escapeHtml(value) {
@@ -202,8 +351,18 @@ function escapeHtml(value) {
 
 async function loadDashboard() {
   try {
-    const payload = await api("/api/summary");
-    renderSummary(payload);
+    const range = getCalendarRange();
+    const [summary, properties, targets, calendarEvents] = await Promise.all([
+      api("/api/summary"),
+      api("/api/properties"),
+      api("/api/maintenance-targets"),
+      api(`/api/calendar?start=${range.start}&end=${range.end}`)
+    ]);
+
+    renderSummary(summary);
+    renderProperties(properties);
+    renderMaintenanceTargetOptions(targets);
+    renderCalendar(calendarEvents);
     setConnectionStatus(true);
   } catch (error) {
     setConnectionStatus(false);
@@ -228,13 +387,42 @@ async function deleteUser(id) {
   await loadDashboard();
 }
 
+function setMaintenanceDate(dateKey) {
+  els.maintenanceDueDate.value = dateKey;
+  document.querySelector("#new-maintenance").scrollIntoView({ behavior: "smooth" });
+  showToast(`Wartung fuer ${formatDate(dateKey)} vorbereiten.`);
+}
+
+function parseTargetValue(value) {
+  const [targetType, targetId] = value.split(":");
+  return {
+    targetType,
+    targetId: Number(targetId)
+  };
+}
+
 function bindEvents() {
   els.refreshButton.addEventListener("click", loadDashboard);
+
+  els.prevMonthButton.addEventListener("click", () => {
+    visibleMonth = addMonths(visibleMonth, -1);
+    loadDashboard();
+  });
+
+  els.nextMonthButton.addEventListener("click", () => {
+    visibleMonth = addMonths(visibleMonth, 1);
+    loadDashboard();
+  });
 
   document.addEventListener("click", (event) => {
     const scrollTarget = event.target.closest("[data-scroll-target]");
     if (scrollTarget) {
       document.querySelector(`#${scrollTarget.dataset.scrollTarget}`)?.scrollIntoView({ behavior: "smooth" });
+    }
+
+    const calendarDay = event.target.closest("[data-calendar-day]");
+    if (calendarDay) {
+      setMaintenanceDate(calendarDay.dataset.calendarDay);
     }
 
     const completeButton = event.target.closest("[data-complete]");
@@ -265,6 +453,64 @@ function bindEvents() {
 
     els.workOrderForm.reset();
     showToast("Auftrag gespeichert.");
+    await loadDashboard();
+  });
+
+  els.maintenanceForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(els.maintenanceForm));
+    const target = parseTargetValue(data.target);
+
+    await api("/api/maintenance-plans", {
+      method: "POST",
+      body: JSON.stringify({
+        title: data.title,
+        targetType: target.targetType,
+        targetId: target.targetId,
+        intervalDays: Number(data.intervalDays),
+        nextDueOn: data.nextDueOn
+      })
+    });
+
+    els.maintenanceForm.reset();
+    showToast("Wartung gespeichert.");
+    await loadDashboard();
+  });
+
+  els.buildingForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(els.buildingForm));
+
+    await api("/api/buildings", {
+      method: "POST",
+      body: JSON.stringify({
+        name: data.name,
+        address: data.address,
+        buildingType: data.buildingType
+      })
+    });
+
+    els.buildingForm.reset();
+    showToast("Gebaeude angelegt.");
+    await loadDashboard();
+  });
+
+  els.apartmentForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(els.apartmentForm));
+
+    await api("/api/apartments", {
+      method: "POST",
+      body: JSON.stringify({
+        buildingId: Number(data.buildingId),
+        apartmentNumber: data.apartmentNumber,
+        name: data.name,
+        floor: data.floor
+      })
+    });
+
+    els.apartmentForm.reset();
+    showToast("Appartment angelegt.");
     await loadDashboard();
   });
 

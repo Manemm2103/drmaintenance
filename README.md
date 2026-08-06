@@ -1,6 +1,6 @@
 # DR Maintenance
 
-DR Maintenance ist ein kleines, Docker-basiertes Grundgeruest fuer einen Wartungsplaner. Die erste Version bringt eine Web-App, eine MariaDB-Datenbank, automatische Tabellenanlage und ein modernes Schwarz-Weiss-Dashboard mit.
+DR Maintenance ist ein kleines, Docker-basiertes Grundgeruest fuer einen Wartungsplaner. Die App bringt eine Web-Oberflaeche, eine MariaDB-Datenbank, automatische Tabellenanlage und ein modernes Schwarz-Weiss-Dashboard mit.
 
 ## Start
 
@@ -41,6 +41,12 @@ Der initiale Adminbenutzer wird beim ersten Start aus den `ADMIN_*` Variablen an
 
 - `GET /api/health`
 - `GET /api/summary`
+- `GET /api/calendar`
+- `GET /api/properties`
+- `POST /api/buildings`
+- `POST /api/apartments`
+- `GET /api/maintenance-targets`
+- `POST /api/maintenance-plans`
 - `GET /api/assets`
 - `POST /api/assets`
 - `GET /api/users`
@@ -54,7 +60,7 @@ Der initiale Adminbenutzer wird beim ersten Start aus den `ADMIN_*` Variablen an
 ## Naechste sinnvolle Schritte
 
 - Benutzerlogin und Rollen
-- echte Anlagenstammdaten mit Dokumenten und Bildern
+- Detailseiten fuer Gebaeude, Appartments und Anlagen
 - wiederkehrende Wartungsauftraege automatisch aus Plaenen erzeugen
 - Ersatzteile, Lieferanten und Kosten
 - Kalenderansicht und Benachrichtigungen

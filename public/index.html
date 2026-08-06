@@ -20,6 +20,8 @@
 
         <nav class="nav">
           <a href="#dashboard" class="active">Dashboard</a>
+          <a href="#kalender">Kalender</a>
+          <a href="#objekte">Objekte</a>
           <a href="#auftraege">Auftraege</a>
           <a href="#anlagen">Anlagen</a>
           <a href="#planung">Planung</a>
@@ -38,9 +40,9 @@
             <p class="eyebrow">Wartungsplaner</p>
             <h1>Alles Wichtige auf einen Blick.</h1>
           </div>
-          <button class="primary-button" type="button" data-scroll-target="new-work-order" title="Neuen Auftrag erfassen">
+          <button class="primary-button" type="button" data-scroll-target="new-maintenance" title="Neue Wartung erfassen">
             <span aria-hidden="true">+</span>
-            Auftrag
+            Wartung
           </button>
         </header>
 
@@ -68,6 +70,116 @@
         </section>
 
         <section class="workspace-grid">
+          <article class="panel full" id="kalender">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Faelligkeiten</p>
+                <h2>Wartungskalender</h2>
+              </div>
+              <div class="calendar-controls">
+                <button class="compact-button" type="button" id="prevMonthButton" aria-label="Vorheriger Monat">&lt;</button>
+                <strong id="calendarMonthLabel">Monat</strong>
+                <button class="compact-button" type="button" id="nextMonthButton" aria-label="Naechster Monat">&gt;</button>
+              </div>
+            </div>
+            <div class="calendar-weekdays" aria-hidden="true">
+              <span>Mo</span>
+              <span>Di</span>
+              <span>Mi</span>
+              <span>Do</span>
+              <span>Fr</span>
+              <span>Sa</span>
+              <span>So</span>
+            </div>
+            <div class="calendar-grid" id="calendarGrid" aria-label="Wartungskalender"></div>
+          </article>
+
+          <article class="panel wide" id="new-maintenance">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Planung</p>
+                <h2>Wartung anlegen</h2>
+              </div>
+            </div>
+            <form id="maintenanceForm" class="form-grid">
+              <label>
+                Titel
+                <input name="title" placeholder="z.B. Rauchmelder pruefen" required>
+              </label>
+              <label>
+                Objekt
+                <select name="target" id="maintenanceTargetSelect" required>
+                  <option value="">Objekt auswaehlen</option>
+                </select>
+              </label>
+              <label>
+                Intervall in Tagen
+                <input name="intervalDays" type="number" min="1" value="365" required>
+              </label>
+              <label>
+                Faellig am
+                <input name="nextDueOn" id="maintenanceDueDate" type="date" required>
+              </label>
+              <button class="primary-button span-2" type="submit">Wartung speichern</button>
+            </form>
+          </article>
+
+          <article class="panel wide" id="objekte">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Objekte</p>
+                <h2>Gebaeude und Appartments</h2>
+              </div>
+            </div>
+            <div class="property-layout">
+              <div class="property-forms">
+                <form id="buildingForm" class="form-grid">
+                  <label>
+                    Gebaeudename
+                    <input name="name" placeholder="z.B. Wohnhaus Gartenblick" required>
+                  </label>
+                  <label>
+                    Typ
+                    <select name="buildingType">
+                      <option value="private_house">Privathaus</option>
+                      <option value="multi_family">Mehrfamilienhaus</option>
+                      <option value="commercial">Gewerbe</option>
+                      <option value="other">Sonstiges</option>
+                    </select>
+                  </label>
+                  <label class="span-2">
+                    Adresse
+                    <input name="address" placeholder="Strasse, Ort">
+                  </label>
+                  <button class="primary-button span-2" type="submit">Gebaeude anlegen</button>
+                </form>
+
+                <form id="apartmentForm" class="form-grid">
+                  <label>
+                    Gebaeude
+                    <select name="buildingId" id="apartmentBuildingSelect" required>
+                      <option value="">Gebaeude auswaehlen</option>
+                    </select>
+                  </label>
+                  <label>
+                    Nummer
+                    <input name="apartmentNumber" placeholder="z.B. EG-01" required>
+                  </label>
+                  <label>
+                    Name
+                    <input name="name" placeholder="z.B. Wohnung EG links" required>
+                  </label>
+                  <label>
+                    Etage
+                    <input name="floor" placeholder="z.B. EG">
+                  </label>
+                  <button class="primary-button span-2" type="submit">Appartment anlegen</button>
+                </form>
+              </div>
+              <div class="property-list" id="propertyList"></div>
+            </div>
+          </article>
+
           <article class="panel wide" id="auftraege">
             <div class="panel-header">
               <div>

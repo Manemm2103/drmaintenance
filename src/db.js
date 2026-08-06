@@ -48,9 +48,42 @@ async function runMigrations() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS buildings (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(180) NOT NULL,
+      address VARCHAR(220) NULL,
+      building_type ENUM('private_house', 'multi_family', 'commercial', 'other') NOT NULL DEFAULT 'private_house',
+      notes TEXT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_buildings_name (name),
+      INDEX idx_buildings_type (building_type)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS apartments (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      building_id INT NOT NULL,
+      apartment_number VARCHAR(80) NOT NULL,
+      name VARCHAR(160) NOT NULL,
+      floor VARCHAR(80) NULL,
+      notes TEXT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT fk_apartments_building FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE CASCADE,
+      UNIQUE KEY uq_apartment_per_building (building_id, apartment_number),
+      INDEX idx_apartments_building (building_id),
+      INDEX idx_apartments_name (name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS maintenance_plans (
       id INT AUTO_INCREMENT PRIMARY KEY,
-      asset_id INT NOT NULL,
+      asset_id INT NULL,
+      target_type ENUM('asset', 'building', 'apartment') NULL,
+      target_id INT NULL,
       title VARCHAR(180) NOT NULL,
       interval_days INT NOT NULL,
       last_done_on DATE NULL,
@@ -60,9 +93,16 @@ async function runMigrations() {
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       CONSTRAINT fk_plans_asset FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
       INDEX idx_plans_due (next_due_on),
-      INDEX idx_plans_active (active)
+      INDEX idx_plans_active (active),
+      INDEX idx_plans_target (target_type, target_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  await pool.query("ALTER TABLE maintenance_plans MODIFY COLUMN asset_id INT NULL");
+  await pool.query("ALTER TABLE maintenance_plans ADD COLUMN IF NOT EXISTS target_type ENUM('asset', 'building', 'apartment') NULL AFTER asset_id");
+  await pool.query("ALTER TABLE maintenance_plans ADD COLUMN IF NOT EXISTS target_id INT NULL AFTER target_type");
+  await pool.query("ALTER TABLE maintenance_plans ADD INDEX IF NOT EXISTS idx_plans_target (target_type, target_id)");
+  await pool.query("UPDATE maintenance_plans SET target_type = 'asset', target_id = asset_id WHERE target_type IS NULL AND asset_id IS NOT NULL");
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS work_orders (
@@ -117,6 +157,7 @@ async function runMigrations() {
   `);
 
   await seedSystemAdmin();
+  await seedPropertyData();
   await seedInitialData();
 }
 
@@ -229,6 +270,50 @@ async function seedInitialData() {
   );
 }
 
+async function seedPropertyData() {
+  const [[{ count }]] = await pool.query("SELECT COUNT(*) AS count FROM buildings");
+  if (count > 0) {
+    return;
+  }
+
+  const [buildingResult] = await pool.query(
+    `
+      INSERT INTO buildings (name, address, building_type, notes)
+      VALUES
+        ('DR Home Privathaus', 'Musterstrasse 12', 'private_house', 'Einzelobjekt ohne Appartments.'),
+        ('Wohnhaus Gartenblick', 'Gartenweg 8', 'multi_family', 'Mehrparteienhaus mit Appartments.')
+    `
+  );
+
+  const privateHouseId = buildingResult.insertId;
+  const multiFamilyId = buildingResult.insertId + 1;
+
+  const [apartmentResult] = await pool.execute(
+    `
+      INSERT INTO apartments (building_id, apartment_number, name, floor)
+      VALUES
+        (?, 'EG-01', 'Appartment EG links', 'EG'),
+        (?, 'OG-02', 'Appartment OG rechts', 'OG')
+    `,
+    [multiFamilyId, multiFamilyId]
+  );
+
+  await pool.execute(
+    `
+      INSERT INTO maintenance_plans (asset_id, target_type, target_id, title, interval_days, last_done_on, next_due_on)
+      VALUES
+        (NULL, 'building', ?, 'Dachrinne und Aussenbereich pruefen', 180, CURDATE() - INTERVAL 120 DAY, CURDATE() + INTERVAL 60 DAY),
+        (NULL, 'apartment', ?, 'Rauchmelder und Fenster pruefen', 365, CURDATE() - INTERVAL 330 DAY, CURDATE() + INTERVAL 35 DAY)
+    `,
+    [privateHouseId, apartmentResult.insertId]
+  );
+
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('building', ?, ?)",
+    [privateHouseId, "Beispiel-Gebaeude und Appartments angelegt."]
+  );
+}
+
 async function getDashboardSummary() {
   const [[summary]] = await pool.query(`
     SELECT
@@ -261,11 +346,31 @@ async function getDashboardSummary() {
       mp.id,
       mp.title,
       mp.interval_days AS intervalDays,
-      mp.next_due_on AS nextDueOn,
-      a.name AS assetName,
-      a.location AS location
+      DATE_FORMAT(mp.next_due_on, '%Y-%m-%d') AS nextDueOn,
+      mp.target_type AS targetType,
+      mp.target_id AS targetId,
+      COALESCE(
+        CASE
+          WHEN mp.target_type = 'asset' THEN target_asset.name
+          WHEN mp.target_type = 'building' THEN target_building.name
+          WHEN mp.target_type = 'apartment' THEN CONCAT(apartment_building.name, ' / ', apartment.name)
+        END,
+        legacy_asset.name
+      ) AS targetName,
+      COALESCE(
+        CASE
+          WHEN mp.target_type = 'asset' THEN target_asset.location
+          WHEN mp.target_type = 'building' THEN target_building.address
+          WHEN mp.target_type = 'apartment' THEN apartment_building.address
+        END,
+        legacy_asset.location
+      ) AS targetSubtitle
     FROM maintenance_plans mp
-    INNER JOIN assets a ON a.id = mp.asset_id
+    LEFT JOIN assets legacy_asset ON legacy_asset.id = mp.asset_id
+    LEFT JOIN assets target_asset ON mp.target_type = 'asset' AND target_asset.id = mp.target_id
+    LEFT JOIN buildings target_building ON mp.target_type = 'building' AND target_building.id = mp.target_id
+    LEFT JOIN apartments apartment ON mp.target_type = 'apartment' AND apartment.id = mp.target_id
+    LEFT JOIN buildings apartment_building ON apartment_building.id = apartment.building_id
     WHERE mp.active = TRUE
     ORDER BY mp.next_due_on ASC
     LIMIT 6
@@ -487,6 +592,349 @@ async function deleteUser(id) {
   return { deleted: true };
 }
 
+async function listProperties() {
+  const [buildings] = await pool.query(`
+    SELECT
+      b.id,
+      b.name,
+      b.address,
+      b.building_type AS buildingType,
+      b.notes,
+      COUNT(a.id) AS apartmentCount
+    FROM buildings b
+    LEFT JOIN apartments a ON a.building_id = b.id
+    GROUP BY b.id, b.name, b.address, b.building_type, b.notes
+    ORDER BY b.name ASC
+  `);
+
+  const [apartments] = await pool.query(`
+    SELECT
+      id,
+      building_id AS buildingId,
+      apartment_number AS apartmentNumber,
+      name,
+      floor,
+      notes
+    FROM apartments
+    ORDER BY apartment_number ASC, name ASC
+  `);
+
+  const apartmentsByBuilding = apartments.reduce((groups, apartment) => {
+    const buildingApartments = groups.get(apartment.buildingId) || [];
+    buildingApartments.push(apartment);
+    groups.set(apartment.buildingId, buildingApartments);
+    return groups;
+  }, new Map());
+
+  return buildings.map((building) => ({
+    ...building,
+    apartments: apartmentsByBuilding.get(building.id) || []
+  }));
+}
+
+async function createBuilding(input) {
+  const name = input.name?.trim();
+  if (!name) {
+    throw createError("Gebaeudename ist ein Pflichtfeld.", 400);
+  }
+
+  const buildingType = input.buildingType || "private_house";
+  const allowedTypes = new Set(["private_house", "multi_family", "commercial", "other"]);
+  if (!allowedTypes.has(buildingType)) {
+    throw createError("Ungueltiger Gebaeudetyp.", 400);
+  }
+
+  const [result] = await pool.execute(
+    `
+      INSERT INTO buildings (name, address, building_type, notes)
+      VALUES (?, ?, ?, ?)
+    `,
+    [
+      name,
+      input.address?.trim() || null,
+      buildingType,
+      input.notes?.trim() || null
+    ]
+  );
+
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('building', ?, ?)",
+    [result.insertId, `Gebaeude "${name}" angelegt.`]
+  );
+
+  return getBuildingById(result.insertId);
+}
+
+async function getBuildingById(id) {
+  const [[building]] = await pool.execute(
+    `
+      SELECT
+        id,
+        name,
+        address,
+        building_type AS buildingType,
+        notes
+      FROM buildings
+      WHERE id = ?
+    `,
+    [id]
+  );
+  return building;
+}
+
+async function createApartment(input) {
+  const buildingId = Number(input.buildingId);
+  const apartmentNumber = input.apartmentNumber?.trim();
+  const name = input.name?.trim();
+
+  if (!buildingId || !apartmentNumber || !name) {
+    throw createError("Gebaeude, Appartment-Nummer und Name sind Pflichtfelder.", 400);
+  }
+
+  try {
+    const [result] = await pool.execute(
+      `
+        INSERT INTO apartments (building_id, apartment_number, name, floor, notes)
+        VALUES (?, ?, ?, ?, ?)
+      `,
+      [
+        buildingId,
+        apartmentNumber,
+        name,
+        input.floor?.trim() || null,
+        input.notes?.trim() || null
+      ]
+    );
+
+    await pool.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('apartment', ?, ?)",
+      [result.insertId, `Appartment "${name}" angelegt.`]
+    );
+
+    return getApartmentById(result.insertId);
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") {
+      throw createError("Dieses Appartment existiert in dem Gebaeude bereits.", 409);
+    }
+
+    if (error.code === "ER_NO_REFERENCED_ROW_2") {
+      throw createError("Das ausgewaehlte Gebaeude existiert nicht.", 400);
+    }
+
+    throw error;
+  }
+}
+
+async function getApartmentById(id) {
+  const [[apartment]] = await pool.execute(
+    `
+      SELECT
+        id,
+        building_id AS buildingId,
+        apartment_number AS apartmentNumber,
+        name,
+        floor,
+        notes
+      FROM apartments
+      WHERE id = ?
+    `,
+    [id]
+  );
+  return apartment;
+}
+
+async function listMaintenanceTargets() {
+  const [rows] = await pool.query(`
+    SELECT targetType, targetId, label, subtitle
+    FROM (
+      SELECT
+        'apartment' AS targetType,
+        a.id AS targetId,
+        CONCAT(b.name, ' / ', a.name) AS label,
+        CONCAT('Appartment ', a.apartment_number, COALESCE(CONCAT(' - ', a.floor), '')) AS subtitle,
+        1 AS sortOrder
+      FROM apartments a
+      INNER JOIN buildings b ON b.id = a.building_id
+
+      UNION ALL
+
+      SELECT
+        'building' AS targetType,
+        b.id AS targetId,
+        b.name AS label,
+        COALESCE(b.address, 'Gebaeude ohne Appartments') AS subtitle,
+        2 AS sortOrder
+      FROM buildings b
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM apartments a
+        WHERE a.building_id = b.id
+      )
+
+      UNION ALL
+
+      SELECT
+        'asset' AS targetType,
+        a.id AS targetId,
+        a.name AS label,
+        CONCAT(a.asset_type, ' - ', a.location) AS subtitle,
+        3 AS sortOrder
+      FROM assets a
+    ) targets
+    ORDER BY sortOrder ASC, label ASC
+  `);
+
+  return rows;
+}
+
+async function assertMaintenanceTarget(targetType, targetId) {
+  if (!["asset", "building", "apartment"].includes(targetType)) {
+    throw createError("Ungueltiges Wartungsziel.", 400);
+  }
+
+  if (targetType === "asset") {
+    const [[asset]] = await pool.execute("SELECT id FROM assets WHERE id = ?", [targetId]);
+    if (!asset) {
+      throw createError("Die ausgewaehlte Anlage existiert nicht.", 400);
+    }
+    return;
+  }
+
+  if (targetType === "apartment") {
+    const [[apartment]] = await pool.execute("SELECT id FROM apartments WHERE id = ?", [targetId]);
+    if (!apartment) {
+      throw createError("Das ausgewaehlte Appartment existiert nicht.", 400);
+    }
+    return;
+  }
+
+  const [[building]] = await pool.execute(
+    `
+      SELECT
+        b.id,
+        (SELECT COUNT(*) FROM apartments a WHERE a.building_id = b.id) AS apartmentCount
+      FROM buildings b
+      WHERE b.id = ?
+    `,
+    [targetId]
+  );
+
+  if (!building) {
+    throw createError("Das ausgewaehlte Gebaeude existiert nicht.", 400);
+  }
+
+  if (building.apartmentCount > 0) {
+    throw createError("Gebaeude mit Appartments koennen nicht direkt als Wartungsziel genutzt werden.", 400);
+  }
+}
+
+async function createMaintenancePlan(input) {
+  const title = input.title?.trim();
+  const targetType = input.targetType;
+  const targetId = Number(input.targetId);
+  const intervalDays = Number(input.intervalDays);
+
+  if (!title || !targetType || !targetId || !intervalDays || !input.nextDueOn) {
+    throw createError("Titel, Objekt, Intervall und Faelligkeit sind Pflichtfelder.", 400);
+  }
+
+  if (intervalDays < 1) {
+    throw createError("Das Intervall muss mindestens 1 Tag betragen.", 400);
+  }
+
+  await assertMaintenanceTarget(targetType, targetId);
+
+  const assetId = targetType === "asset" ? targetId : null;
+  const [result] = await pool.execute(
+    `
+      INSERT INTO maintenance_plans (asset_id, target_type, target_id, title, interval_days, last_done_on, next_due_on)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      assetId,
+      targetType,
+      targetId,
+      title,
+      intervalDays,
+      input.lastDoneOn || null,
+      input.nextDueOn
+    ]
+  );
+
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('maintenance_plan', ?, ?)",
+    [result.insertId, `Wartung "${title}" angelegt.`]
+  );
+
+  return getMaintenancePlanById(result.insertId);
+}
+
+async function getMaintenancePlanById(id) {
+  const [[plan]] = await pool.execute(
+    `
+      SELECT
+        mp.id,
+        mp.title,
+        mp.interval_days AS intervalDays,
+        DATE_FORMAT(mp.next_due_on, '%Y-%m-%d') AS nextDueOn,
+        mp.target_type AS targetType,
+        mp.target_id AS targetId,
+        COALESCE(
+          CASE
+            WHEN mp.target_type = 'asset' THEN target_asset.name
+            WHEN mp.target_type = 'building' THEN target_building.name
+            WHEN mp.target_type = 'apartment' THEN CONCAT(apartment_building.name, ' / ', apartment.name)
+          END,
+          legacy_asset.name
+        ) AS targetName
+      FROM maintenance_plans mp
+      LEFT JOIN assets legacy_asset ON legacy_asset.id = mp.asset_id
+      LEFT JOIN assets target_asset ON mp.target_type = 'asset' AND target_asset.id = mp.target_id
+      LEFT JOIN buildings target_building ON mp.target_type = 'building' AND target_building.id = mp.target_id
+      LEFT JOIN apartments apartment ON mp.target_type = 'apartment' AND apartment.id = mp.target_id
+      LEFT JOIN buildings apartment_building ON apartment_building.id = apartment.building_id
+      WHERE mp.id = ?
+    `,
+    [id]
+  );
+  return plan;
+}
+
+async function getCalendarEvents(startDate, endDate) {
+  const [rows] = await pool.execute(
+    `
+      SELECT
+        mp.id,
+        'maintenance' AS type,
+        mp.title,
+        DATE_FORMAT(mp.next_due_on, '%Y-%m-%d') AS dueDate,
+        mp.interval_days AS intervalDays,
+        mp.target_type AS targetType,
+        mp.target_id AS targetId,
+        COALESCE(
+          CASE
+            WHEN mp.target_type = 'asset' THEN target_asset.name
+            WHEN mp.target_type = 'building' THEN target_building.name
+            WHEN mp.target_type = 'apartment' THEN CONCAT(apartment_building.name, ' / ', apartment.name)
+          END,
+          legacy_asset.name
+        ) AS targetName
+      FROM maintenance_plans mp
+      LEFT JOIN assets legacy_asset ON legacy_asset.id = mp.asset_id
+      LEFT JOIN assets target_asset ON mp.target_type = 'asset' AND target_asset.id = mp.target_id
+      LEFT JOIN buildings target_building ON mp.target_type = 'building' AND target_building.id = mp.target_id
+      LEFT JOIN apartments apartment ON mp.target_type = 'apartment' AND apartment.id = mp.target_id
+      LEFT JOIN buildings apartment_building ON apartment_building.id = apartment.building_id
+      WHERE mp.active = TRUE
+        AND mp.next_due_on BETWEEN ? AND ?
+      ORDER BY mp.next_due_on ASC, mp.title ASC
+    `,
+    [startDate, endDate]
+  );
+
+  return rows;
+}
+
 async function listAssets() {
   const [rows] = await pool.query(`
     SELECT id, name, asset_type AS assetType, location, serial_number AS serialNumber, criticality
@@ -628,6 +1076,12 @@ module.exports = {
   createUser,
   updateUser,
   deleteUser,
+  listProperties,
+  createBuilding,
+  createApartment,
+  listMaintenanceTargets,
+  createMaintenancePlan,
+  getCalendarEvents,
   listAssets,
   createAsset,
   listWorkOrders,

@@ -54,6 +54,37 @@ app.delete("/api/users/:id", asyncRoute(async (req, res) => {
   res.json(await db.deleteUser(Number(req.params.id)));
 }));
 
+app.get("/api/properties", asyncRoute(async (_req, res) => {
+  res.json(await db.listProperties());
+}));
+
+app.post("/api/buildings", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["name"]);
+  const building = await db.createBuilding(req.body);
+  res.status(201).json(building);
+}));
+
+app.post("/api/apartments", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["buildingId", "apartmentNumber", "name"]);
+  const apartment = await db.createApartment(req.body);
+  res.status(201).json(apartment);
+}));
+
+app.get("/api/maintenance-targets", asyncRoute(async (_req, res) => {
+  res.json(await db.listMaintenanceTargets());
+}));
+
+app.post("/api/maintenance-plans", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["title", "targetType", "targetId", "intervalDays", "nextDueOn"]);
+  const maintenancePlan = await db.createMaintenancePlan(req.body);
+  res.status(201).json(maintenancePlan);
+}));
+
+app.get("/api/calendar", asyncRoute(async (req, res) => {
+  requireFields(req.query, ["start", "end"]);
+  res.json(await db.getCalendarEvents(req.query.start, req.query.end));
+}));
+
 app.get("/api/assets", asyncRoute(async (_req, res) => {
   res.json(await db.listAssets());
 }));
