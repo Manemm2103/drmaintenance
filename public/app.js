@@ -36,7 +36,13 @@ const els = {
   assetSubmitButton: document.querySelector("#assetSubmitButton"),
   assetNewButton: document.querySelector("#assetNewButton"),
   buildingForm: document.querySelector("#buildingForm"),
+  buildingIdInput: document.querySelector("#buildingIdInput"),
+  buildingSubmitButton: document.querySelector("#buildingSubmitButton"),
+  buildingNewButton: document.querySelector("#buildingNewButton"),
   apartmentForm: document.querySelector("#apartmentForm"),
+  apartmentIdInput: document.querySelector("#apartmentIdInput"),
+  apartmentSubmitButton: document.querySelector("#apartmentSubmitButton"),
+  apartmentNewButton: document.querySelector("#apartmentNewButton"),
   userForm: document.querySelector("#userForm"),
   toast: document.querySelector("#toast")
 };
@@ -126,6 +132,7 @@ const hashViewMap = {
 
 let visibleMonth = startOfMonth(new Date());
 let latestAssets = [];
+let latestProperties = [];
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -389,6 +396,7 @@ function renderUsers(users) {
 }
 
 function renderProperties(properties) {
+  latestProperties = properties || [];
   renderApartmentBuildingOptions(properties);
 
   if (!properties || properties.length === 0) {
@@ -397,7 +405,7 @@ function renderProperties(properties) {
   }
 
   els.propertyList.innerHTML = properties.map((building) => `
-    <div class="property-card">
+    <div class="property-card clickable-list-item" role="button" tabindex="0" data-edit-building="${building.id}" title="Gebäude bearbeiten">
       <div class="property-card-header">
         <div>
           <strong>${escapeHtml(building.name)}</strong>
@@ -413,7 +421,7 @@ function renderProperties(properties) {
         ? '<span class="badge light">Gebäude ohne Appartments</span>'
         : `<div class="apartment-list">
             ${building.apartments.map((apartment) => `
-              <div class="apartment-chip">
+              <div class="apartment-chip clickable-list-item" role="button" tabindex="0" data-edit-apartment="${apartment.id}" title="Appartment bearbeiten">
                 <div>
                   <span>${escapeHtml(apartment.name)}</span>
                   <span class="muted">${escapeHtml(apartment.apartmentNumber)}${apartment.floor ? ` - ${escapeHtml(apartment.floor)}` : ""}</span>
@@ -538,6 +546,50 @@ function duplicateAssetInForm(asset) {
   });
   els.assetIdInput.value = "";
   els.assetSubmitButton.textContent = "Kopie speichern";
+}
+
+function findApartmentById(id) {
+  for (const building of latestProperties) {
+    const apartment = building.apartments.find((item) => String(item.id) === String(id));
+    if (apartment) {
+      return apartment;
+    }
+  }
+
+  return null;
+}
+
+function resetBuildingForm() {
+  els.buildingForm.reset();
+  els.buildingIdInput.value = "";
+  els.buildingSubmitButton.textContent = "Gebäude speichern";
+}
+
+function loadBuildingIntoForm(building) {
+  els.buildingForm.elements.buildingId.value = building.id;
+  els.buildingForm.elements.name.value = building.name || "";
+  els.buildingForm.elements.buildingType.value = building.buildingType || "private_house";
+  els.buildingForm.elements.address.value = building.address || "";
+  els.buildingSubmitButton.textContent = "Änderungen speichern";
+  setView("gebaeude", { updateHash: true, scrollTop: false });
+  window.setTimeout(() => scrollToTarget("buildingForm"), 0);
+}
+
+function resetApartmentForm() {
+  els.apartmentForm.reset();
+  els.apartmentIdInput.value = "";
+  els.apartmentSubmitButton.textContent = "Appartment speichern";
+}
+
+function loadApartmentIntoForm(apartment) {
+  els.apartmentForm.elements.apartmentId.value = apartment.id;
+  els.apartmentForm.elements.buildingId.value = apartment.buildingId || "";
+  els.apartmentForm.elements.apartmentNumber.value = apartment.apartmentNumber || "";
+  els.apartmentForm.elements.name.value = apartment.name || "";
+  els.apartmentForm.elements.floor.value = apartment.floor || "";
+  els.apartmentSubmitButton.textContent = "Änderungen speichern";
+  setView("gebaeude", { updateHash: true, scrollTop: false });
+  window.setTimeout(() => scrollToTarget("apartmentForm"), 0);
 }
 
 function escapeHtml(value) {
@@ -743,12 +795,16 @@ function bindEvents() {
 
     const deleteBuildingButton = event.target.closest("[data-delete-building]");
     if (deleteBuildingButton) {
+      event.stopPropagation();
       deleteBuilding(deleteBuildingButton.dataset.deleteBuilding).catch((error) => showToast(error.message));
+      return;
     }
 
     const deleteApartmentButton = event.target.closest("[data-delete-apartment]");
     if (deleteApartmentButton) {
+      event.stopPropagation();
       deleteApartment(deleteApartmentButton.dataset.deleteApartment).catch((error) => showToast(error.message));
+      return;
     }
 
     const editAsset = event.target.closest("[data-edit-asset]");
@@ -758,6 +814,24 @@ function bindEvents() {
         loadAssetIntoForm(asset);
       }
     }
+
+    const editApartment = event.target.closest("[data-edit-apartment]");
+    if (editApartment) {
+      event.stopPropagation();
+      const apartment = findApartmentById(editApartment.dataset.editApartment);
+      if (apartment) {
+        loadApartmentIntoForm(apartment);
+      }
+      return;
+    }
+
+    const editBuilding = event.target.closest("[data-edit-building]");
+    if (editBuilding) {
+      const building = latestProperties.find((item) => String(item.id) === String(editBuilding.dataset.editBuilding));
+      if (building) {
+        loadBuildingIntoForm(building);
+      }
+    }
   });
 
   document.addEventListener("keydown", (event) => {
@@ -765,15 +839,37 @@ function bindEvents() {
       return;
     }
 
-    const editAsset = event.target.closest("[data-edit-asset]");
-    if (!editAsset || event.target.closest("button")) {
+    if (event.target.closest("button")) {
       return;
     }
 
-    event.preventDefault();
-    const asset = latestAssets.find((item) => String(item.id) === String(editAsset.dataset.editAsset));
-    if (asset) {
-      loadAssetIntoForm(asset);
+    const editAsset = event.target.closest("[data-edit-asset]");
+    if (editAsset) {
+      event.preventDefault();
+      const asset = latestAssets.find((item) => String(item.id) === String(editAsset.dataset.editAsset));
+      if (asset) {
+        loadAssetIntoForm(asset);
+      }
+      return;
+    }
+
+    const editApartment = event.target.closest("[data-edit-apartment]");
+    if (editApartment) {
+      event.preventDefault();
+      const apartment = findApartmentById(editApartment.dataset.editApartment);
+      if (apartment) {
+        loadApartmentIntoForm(apartment);
+      }
+      return;
+    }
+
+    const editBuilding = event.target.closest("[data-edit-building]");
+    if (editBuilding) {
+      event.preventDefault();
+      const building = latestProperties.find((item) => String(item.id) === String(editBuilding.dataset.editBuilding));
+      if (building) {
+        loadBuildingIntoForm(building);
+      }
     }
   });
 
@@ -844,9 +940,10 @@ function bindEvents() {
   els.buildingForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(els.buildingForm));
+    const isUpdate = Boolean(data.buildingId);
 
-    await api("/api/buildings", {
-      method: "POST",
+    await api(isUpdate ? `/api/buildings/${data.buildingId}` : "/api/buildings", {
+      method: isUpdate ? "PATCH" : "POST",
       body: JSON.stringify({
         name: data.name,
         address: data.address,
@@ -854,17 +951,18 @@ function bindEvents() {
       })
     });
 
-    els.buildingForm.reset();
-    showToast("Gebäude angelegt.");
+    resetBuildingForm();
+    showToast(isUpdate ? "Gebäude aktualisiert." : "Gebäude angelegt.");
     await loadDashboard();
   });
 
   els.apartmentForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(els.apartmentForm));
+    const isUpdate = Boolean(data.apartmentId);
 
-    await api("/api/apartments", {
-      method: "POST",
+    await api(isUpdate ? `/api/apartments/${data.apartmentId}` : "/api/apartments", {
+      method: isUpdate ? "PATCH" : "POST",
       body: JSON.stringify({
         buildingId: Number(data.buildingId),
         apartmentNumber: data.apartmentNumber,
@@ -873,10 +971,13 @@ function bindEvents() {
       })
     });
 
-    els.apartmentForm.reset();
-    showToast("Appartment angelegt.");
+    resetApartmentForm();
+    showToast(isUpdate ? "Appartment aktualisiert." : "Appartment angelegt.");
     await loadDashboard();
   });
+
+  els.buildingNewButton.addEventListener("click", resetBuildingForm);
+  els.apartmentNewButton.addEventListener("click", resetApartmentForm);
 
   els.userForm.addEventListener("submit", async (event) => {
     event.preventDefault();

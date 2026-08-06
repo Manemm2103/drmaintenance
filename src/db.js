@@ -826,7 +826,7 @@ async function listProperties() {
   }));
 }
 
-async function createBuilding(input) {
+function normalizeBuildingInput(input) {
   const name = input.name?.trim();
   if (!name) {
     throw createError("Gebäudename ist ein Pflichtfeld.", 400);
@@ -838,22 +838,32 @@ async function createBuilding(input) {
     throw createError("Ungültiger Gebäudetyp.", 400);
   }
 
+  return {
+    name,
+    address: input.address?.trim() || null,
+    buildingType,
+    notes: input.notes?.trim() || null
+  };
+}
+
+async function createBuilding(input) {
+  const building = normalizeBuildingInput(input);
   const [result] = await pool.execute(
     `
       INSERT INTO buildings (name, address, building_type, notes)
       VALUES (?, ?, ?, ?)
     `,
     [
-      name,
-      input.address?.trim() || null,
-      buildingType,
-      input.notes?.trim() || null
+      building.name,
+      building.address,
+      building.buildingType,
+      building.notes
     ]
   );
 
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('building', ?, ?)",
-    [result.insertId, `Gebäude "${name}" angelegt.`]
+    [result.insertId, `Gebäude "${building.name}" angelegt.`]
   );
 
   return getBuildingById(result.insertId);
@@ -874,6 +884,36 @@ async function getBuildingById(id) {
     [id]
   );
   return building;
+}
+
+async function updateBuilding(id, input) {
+  const existingBuilding = await getBuildingById(id);
+  if (!existingBuilding) {
+    throw createError("Gebäude nicht gefunden.", 404);
+  }
+
+  const building = normalizeBuildingInput(input);
+  await pool.execute(
+    `
+      UPDATE buildings
+      SET name = ?, address = ?, building_type = ?, notes = ?
+      WHERE id = ?
+    `,
+    [
+      building.name,
+      building.address,
+      building.buildingType,
+      building.notes,
+      id
+    ]
+  );
+
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('building', ?, ?)",
+    [id, `Gebäude "${building.name}" aktualisiert.`]
+  );
+
+  return getBuildingById(id);
 }
 
 async function deleteBuilding(id) {
@@ -915,7 +955,7 @@ async function deleteBuilding(id) {
   return { deleted: true };
 }
 
-async function createApartment(input) {
+function normalizeApartmentInput(input) {
   const buildingId = Number(input.buildingId);
   const apartmentNumber = input.apartmentNumber?.trim();
   const name = input.name?.trim();
@@ -924,6 +964,29 @@ async function createApartment(input) {
     throw createError("Gebäude, Appartment-Nummer und Name sind Pflichtfelder.", 400);
   }
 
+  return {
+    buildingId,
+    apartmentNumber,
+    name,
+    floor: input.floor?.trim() || null,
+    notes: input.notes?.trim() || null
+  };
+}
+
+function handleApartmentWriteError(error) {
+  if (error.code === "ER_DUP_ENTRY") {
+    throw createError("Dieses Appartment existiert in dem Gebäude bereits.", 409);
+  }
+
+  if (error.code === "ER_NO_REFERENCED_ROW_2") {
+    throw createError("Das ausgewählte Gebäude existiert nicht.", 400);
+  }
+
+  throw error;
+}
+
+async function createApartment(input) {
+  const apartment = normalizeApartmentInput(input);
   try {
     const [result] = await pool.execute(
       `
@@ -931,30 +994,22 @@ async function createApartment(input) {
         VALUES (?, ?, ?, ?, ?)
       `,
       [
-        buildingId,
-        apartmentNumber,
-        name,
-        input.floor?.trim() || null,
-        input.notes?.trim() || null
+        apartment.buildingId,
+        apartment.apartmentNumber,
+        apartment.name,
+        apartment.floor,
+        apartment.notes
       ]
     );
 
     await pool.execute(
       "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('apartment', ?, ?)",
-      [result.insertId, `Appartment "${name}" angelegt.`]
+      [result.insertId, `Appartment "${apartment.name}" angelegt.`]
     );
 
     return getApartmentById(result.insertId);
   } catch (error) {
-    if (error.code === "ER_DUP_ENTRY") {
-      throw createError("Dieses Appartment existiert in dem Gebäude bereits.", 409);
-    }
-
-    if (error.code === "ER_NO_REFERENCED_ROW_2") {
-      throw createError("Das ausgewählte Gebäude existiert nicht.", 400);
-    }
-
-    throw error;
+    handleApartmentWriteError(error);
   }
 }
 
@@ -974,6 +1029,41 @@ async function getApartmentById(id) {
     [id]
   );
   return apartment;
+}
+
+async function updateApartment(id, input) {
+  const existingApartment = await getApartmentById(id);
+  if (!existingApartment) {
+    throw createError("Appartment nicht gefunden.", 404);
+  }
+
+  const apartment = normalizeApartmentInput(input);
+  try {
+    await pool.execute(
+      `
+        UPDATE apartments
+        SET building_id = ?, apartment_number = ?, name = ?, floor = ?, notes = ?
+        WHERE id = ?
+      `,
+      [
+        apartment.buildingId,
+        apartment.apartmentNumber,
+        apartment.name,
+        apartment.floor,
+        apartment.notes,
+        id
+      ]
+    );
+
+    await pool.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('apartment', ?, ?)",
+      [id, `Appartment "${apartment.name}" aktualisiert.`]
+    );
+
+    return getApartmentById(id);
+  } catch (error) {
+    handleApartmentWriteError(error);
+  }
 }
 
 async function deleteApartment(id) {
@@ -1431,8 +1521,10 @@ module.exports = {
   deleteUser,
   listProperties,
   createBuilding,
+  updateBuilding,
   deleteBuilding,
   createApartment,
+  updateApartment,
   deleteApartment,
   listMaintenanceTargets,
   createMaintenancePlan,

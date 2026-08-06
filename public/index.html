@@ -114,6 +114,7 @@
             <div class="property-layout">
               <div class="property-forms">
                 <form id="buildingForm" class="form-grid">
+                  <input type="hidden" name="buildingId" id="buildingIdInput">
                   <label>
                     Gebäudename
                     <input name="name" placeholder="z.B. Wohnhaus Gartenblick" required>
@@ -131,10 +132,14 @@
                     Adresse
                     <input name="address" placeholder="Straße, Ort">
                   </label>
-                  <button class="primary-button span-2" type="submit">Gebäude anlegen</button>
+                  <div class="form-actions span-2">
+                    <button class="primary-button" type="submit" id="buildingSubmitButton">Gebäude speichern</button>
+                    <button class="ghost-button" type="button" id="buildingNewButton">Neu</button>
+                  </div>
                 </form>
 
                 <form id="apartmentForm" class="form-grid">
+                  <input type="hidden" name="apartmentId" id="apartmentIdInput">
                   <label>
                     Gebäude
                     <select name="buildingId" id="apartmentBuildingSelect" required>
@@ -153,7 +158,10 @@
                     Etage
                     <input name="floor" placeholder="z.B. EG">
                   </label>
-                  <button class="primary-button span-2" type="submit">Appartment anlegen</button>
+                  <div class="form-actions span-2">
+                    <button class="primary-button" type="submit" id="apartmentSubmitButton">Appartment speichern</button>
+                    <button class="ghost-button" type="button" id="apartmentNewButton">Neu</button>
+                  </div>
                 </form>
               </div>
               <div class="property-list" id="propertyList"></div>

@@ -237,6 +237,11 @@ app.post("/api/buildings", asyncRoute(async (req, res) => {
   res.status(201).json(building);
 }));
 
+app.patch("/api/buildings/:id", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["name"]);
+  res.json(await db.updateBuilding(Number(req.params.id), req.body));
+}));
+
 app.delete("/api/buildings/:id", asyncRoute(async (req, res) => {
   res.json(await db.deleteBuilding(Number(req.params.id)));
 }));
@@ -245,6 +250,11 @@ app.post("/api/apartments", asyncRoute(async (req, res) => {
   requireFields(req.body, ["buildingId", "apartmentNumber", "name"]);
   const apartment = await db.createApartment(req.body);
   res.status(201).json(apartment);
+}));
+
+app.patch("/api/apartments/:id", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["buildingId", "apartmentNumber", "name"]);
+  res.json(await db.updateApartment(Number(req.params.id), req.body));
 }));
 
 app.delete("/api/apartments/:id", asyncRoute(async (req, res) => {
