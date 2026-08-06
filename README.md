@@ -54,8 +54,10 @@ Ohne Login wird nur die Anmeldeseite ausgeliefert. Mit dem Haken `Angemeldet ble
 - `POST /api/apartments`
 - `GET /api/maintenance-targets`
 - `POST /api/maintenance-plans`
+- `DELETE /api/maintenance-plans/:id`
 - `GET /api/assets`
 - `POST /api/assets`
+- `DELETE /api/assets/:id`
 - `GET /api/users`
 - `POST /api/users`
 - `PATCH /api/users/:id`
@@ -66,7 +68,7 @@ Ohne Login wird nur die Anmeldeseite ausgeliefert. Mit dem Haken `Angemeldet ble
 
 ## Versionierung
 
-Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.06.09`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
+Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.06.10`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
 
 ## Nächste sinnvolle Schritte
 

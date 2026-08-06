@@ -474,14 +474,12 @@ async function getDashboardSummary() {
     LEFT JOIN buildings apartment_building ON apartment_building.id = apartment.building_id
     WHERE mp.active = TRUE
     ORDER BY mp.next_due_on ASC
-    LIMIT 6
   `);
 
   const [assets] = await pool.query(`
     SELECT id, name, asset_type AS assetType, location, serial_number AS serialNumber, criticality
     FROM assets
     ORDER BY FIELD(criticality, 'critical', 'high', 'medium', 'low') ASC, name ASC
-    LIMIT 8
   `);
 
   const [activity] = await pool.query(`
@@ -1059,10 +1057,25 @@ async function createMaintenancePlan(input) {
 
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('maintenance_plan', ?, ?)",
-    [result.insertId, `Wartung "${title}" angelegt.`]
+    [result.insertId, `Wartungsplan "${title}" angelegt.`]
   );
 
   return getMaintenancePlanById(result.insertId);
+}
+
+async function deleteMaintenancePlan(id) {
+  const existingPlan = await getMaintenancePlanById(id);
+  if (!existingPlan) {
+    throw createError("Wartungsplan nicht gefunden.", 404);
+  }
+
+  await pool.execute("DELETE FROM maintenance_plans WHERE id = ?", [id]);
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('maintenance_plan', ?, ?)",
+    [id, `Wartungsplan "${existingPlan.title}" gelöscht.`]
+  );
+
+  return { deleted: true };
 }
 
 async function getMaintenancePlanById(id) {
@@ -1141,23 +1154,38 @@ async function listAssets() {
 }
 
 async function createAsset(input) {
+  const name = input.name?.trim();
+  const assetType = input.assetType?.trim();
+  const location = input.location?.trim();
+  const serialNumber = input.serialNumber?.trim() || null;
+  const criticality = input.criticality || "medium";
+  const allowedCriticalities = new Set(["low", "medium", "high", "critical"]);
+
+  if (!name || !assetType || !location) {
+    throw createError("Name, Typ und Standort sind Pflichtfelder.", 400);
+  }
+
+  if (!allowedCriticalities.has(criticality)) {
+    throw createError("Ungültige Kritikalität.", 400);
+  }
+
   const [result] = await pool.execute(
     `
       INSERT INTO assets (name, asset_type, location, serial_number, criticality)
       VALUES (?, ?, ?, ?, ?)
     `,
     [
-      input.name,
-      input.assetType,
-      input.location,
-      input.serialNumber || null,
-      input.criticality || "medium"
+      name,
+      assetType,
+      location,
+      serialNumber,
+      criticality
     ]
   );
 
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
-    [result.insertId, `Wartungsobjekt "${input.name}" angelegt.`]
+    [result.insertId, `Wartungsobjekt "${name}" angelegt.`]
   );
 
   return getAssetById(result.insertId);
@@ -1173,6 +1201,21 @@ async function getAssetById(id) {
     [id]
   );
   return row;
+}
+
+async function deleteAsset(id) {
+  const existingAsset = await getAssetById(id);
+  if (!existingAsset) {
+    throw createError("Wartungsobjekt nicht gefunden.", 404);
+  }
+
+  await pool.execute("DELETE FROM assets WHERE id = ?", [id]);
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
+    [id, `Wartungsobjekt "${existingAsset.name}" gelöscht.`]
+  );
+
+  return { deleted: true };
 }
 
 async function listWorkOrders() {
@@ -1281,9 +1324,11 @@ module.exports = {
   createApartment,
   listMaintenanceTargets,
   createMaintenancePlan,
+  deleteMaintenancePlan,
   getCalendarEvents,
   listAssets,
   createAsset,
+  deleteAsset,
   listWorkOrders,
   createWorkOrder,
   updateWorkOrderStatus

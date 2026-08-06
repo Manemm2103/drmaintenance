@@ -25,6 +25,7 @@ const els = {
   refreshButton: document.querySelector("#refreshButton"),
   workOrderForm: document.querySelector("#workOrderForm"),
   maintenanceForm: document.querySelector("#maintenanceForm"),
+  assetForm: document.querySelector("#assetForm"),
   buildingForm: document.querySelector("#buildingForm"),
   apartmentForm: document.querySelector("#apartmentForm"),
   userForm: document.querySelector("#userForm"),
@@ -194,14 +195,23 @@ function renderWorkOrders(workOrders) {
 }
 
 function renderAssets(assets) {
+  if (!assets || assets.length === 0) {
+    els.assetList.innerHTML = '<div class="list-item">Keine Wartungsobjekte angelegt.</div>';
+    return;
+  }
+
   els.assetList.innerHTML = assets.map((asset) => `
-    <div class="list-item">
-      <strong>${escapeHtml(asset.name)}</strong>
-      <div class="list-meta">
-        <span>${escapeHtml(asset.assetType)}</span>
-        <span>${escapeHtml(asset.location)}</span>
-        <span>${priorityLabels[asset.criticality] || asset.criticality}</span>
+    <div class="list-item list-item-with-actions">
+      <div>
+        <strong>${escapeHtml(asset.name)}</strong>
+        <div class="list-meta">
+          <span>${escapeHtml(asset.assetType)}</span>
+          <span>${escapeHtml(asset.location)}</span>
+          <span>${priorityLabels[asset.criticality] || asset.criticality}</span>
+          ${asset.serialNumber ? `<span>${escapeHtml(asset.serialNumber)}</span>` : ""}
+        </div>
       </div>
+      <button class="compact-button" type="button" title="Wartungsobjekt löschen" aria-label="Wartungsobjekt löschen" data-delete-asset="${asset.id}">X</button>
     </div>
   `).join("");
 }
@@ -213,14 +223,17 @@ function renderPlans(plans) {
   }
 
   els.planList.innerHTML = plans.map((plan) => `
-    <div class="list-item">
-      <strong>${escapeHtml(plan.title)}</strong>
-      <div class="list-meta">
-        <span>${escapeHtml(plan.targetName || "Kein Objekt")}</span>
-        <span>${escapeHtml(plan.targetSubtitle || "")}</span>
-        <span>${formatDate(plan.nextDueOn)}</span>
-        <span>${plan.intervalDays} Tage</span>
+    <div class="list-item list-item-with-actions">
+      <div>
+        <strong>${escapeHtml(plan.title)}</strong>
+        <div class="list-meta">
+          <span>${escapeHtml(plan.targetName || "Kein Objekt")}</span>
+          <span>${escapeHtml(plan.targetSubtitle || "")}</span>
+          <span>${formatDate(plan.nextDueOn)}</span>
+          <span>${plan.intervalDays} Tage</span>
+        </div>
       </div>
+      <button class="compact-button" type="button" title="Wartungsplan löschen" aria-label="Wartungsplan löschen" data-delete-plan="${plan.id}">X</button>
     </div>
   `).join("");
 }
@@ -414,6 +427,30 @@ async function deleteUser(id) {
   await loadDashboard();
 }
 
+async function deleteAsset(id) {
+  if (!window.confirm("Wartungsobjekt wirklich löschen? Zugehörige Wartungspläne werden ebenfalls entfernt.")) {
+    return;
+  }
+
+  await api(`/api/assets/${id}`, {
+    method: "DELETE"
+  });
+  showToast("Wartungsobjekt gelöscht.");
+  await loadDashboard();
+}
+
+async function deleteMaintenancePlan(id) {
+  if (!window.confirm("Wartungsplan wirklich löschen?")) {
+    return;
+  }
+
+  await api(`/api/maintenance-plans/${id}`, {
+    method: "DELETE"
+  });
+  showToast("Wartungsplan gelöscht.");
+  await loadDashboard();
+}
+
 async function logout() {
   await api("/api/auth/logout", {
     method: "POST",
@@ -425,7 +462,7 @@ async function logout() {
 function setMaintenanceDate(dateKey) {
   els.maintenanceDueDate.value = dateKey;
   document.querySelector("#new-maintenance").scrollIntoView({ behavior: "smooth" });
-  showToast(`Wartung für ${formatDate(dateKey)} vorbereiten.`);
+  showToast(`Wartungsplan für ${formatDate(dateKey)} vorbereiten.`);
 }
 
 function parseTargetValue(value) {
@@ -472,6 +509,16 @@ function bindEvents() {
     if (deleteUserButton) {
       deleteUser(deleteUserButton.dataset.deleteUser).catch((error) => showToast(error.message));
     }
+
+    const deleteAssetButton = event.target.closest("[data-delete-asset]");
+    if (deleteAssetButton) {
+      deleteAsset(deleteAssetButton.dataset.deleteAsset).catch((error) => showToast(error.message));
+    }
+
+    const deletePlanButton = event.target.closest("[data-delete-plan]");
+    if (deletePlanButton) {
+      deleteMaintenancePlan(deletePlanButton.dataset.deletePlan).catch((error) => showToast(error.message));
+    }
   });
 
   els.workOrderForm.addEventListener("submit", async (event) => {
@@ -511,7 +558,27 @@ function bindEvents() {
     });
 
     els.maintenanceForm.reset();
-    showToast("Wartung gespeichert.");
+    showToast("Wartungsplan gespeichert.");
+    await loadDashboard();
+  });
+
+  els.assetForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(els.assetForm));
+
+    await api("/api/assets", {
+      method: "POST",
+      body: JSON.stringify({
+        name: data.name,
+        assetType: data.assetType,
+        location: data.location,
+        serialNumber: data.serialNumber,
+        criticality: data.criticality
+      })
+    });
+
+    els.assetForm.reset();
+    showToast("Wartungsobjekt gespeichert.");
     await loadDashboard();
   });
 

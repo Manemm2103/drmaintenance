@@ -45,9 +45,9 @@
             <p class="eyebrow">Wartungsplaner</p>
             <h1>Alles Wichtige auf einen Blick.</h1>
           </div>
-          <button class="primary-button" type="button" data-scroll-target="new-maintenance" title="Neue Wartung erfassen">
+          <button class="primary-button" type="button" data-scroll-target="new-maintenance" title="Neuen Wartungsplan erfassen">
             <span aria-hidden="true">+</span>
-            Wartung
+            Wartungsplan
           </button>
         </header>
 
@@ -103,7 +103,7 @@
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Planung</p>
-                <h2>Wartung anlegen</h2>
+                <h2>Wartungsplan anlegen</h2>
               </div>
             </div>
             <form id="maintenanceForm" class="form-grid">
@@ -125,7 +125,7 @@
                 Fällig am
                 <input name="nextDueOn" id="maintenanceDueDate" type="date" required>
               </label>
-              <button class="primary-button span-2" type="submit">Wartung speichern</button>
+              <button class="primary-button span-2" type="submit">Wartungsplan speichern</button>
             </form>
           </article>
 
@@ -260,6 +260,34 @@
                 <h2>Wartungsobjekte</h2>
               </div>
             </div>
+            <form id="assetForm" class="form-grid compact-form">
+              <label>
+                Name
+                <input name="name" placeholder="z.B. Klimaanlage Wellnessbereich" required>
+              </label>
+              <label>
+                Typ
+                <input name="assetType" placeholder="z.B. Klima" required>
+              </label>
+              <label>
+                Standort
+                <input name="location" placeholder="z.B. Wellnessbereich" required>
+              </label>
+              <label>
+                Seriennummer
+                <input name="serialNumber" placeholder="optional">
+              </label>
+              <label class="span-2">
+                Kritikalität
+                <select name="criticality">
+                  <option value="medium">Mittel</option>
+                  <option value="low">Niedrig</option>
+                  <option value="high">Hoch</option>
+                  <option value="critical">Kritisch</option>
+                </select>
+              </label>
+              <button class="primary-button span-2" type="submit">Objekt speichern</button>
+            </form>
             <div class="asset-list" id="assetList"></div>
           </article>
 

@@ -253,6 +253,10 @@ app.post("/api/maintenance-plans", asyncRoute(async (req, res) => {
   res.status(201).json(maintenancePlan);
 }));
 
+app.delete("/api/maintenance-plans/:id", asyncRoute(async (req, res) => {
+  res.json(await db.deleteMaintenancePlan(Number(req.params.id)));
+}));
+
 app.get("/api/calendar", asyncRoute(async (req, res) => {
   requireFields(req.query, ["start", "end"]);
   res.json(await db.getCalendarEvents(req.query.start, req.query.end));
@@ -266,6 +270,10 @@ app.post("/api/assets", asyncRoute(async (req, res) => {
   requireFields(req.body, ["name", "assetType", "location"]);
   const asset = await db.createAsset(req.body);
   res.status(201).json(asset);
+}));
+
+app.delete("/api/assets/:id", asyncRoute(async (req, res) => {
+  res.json(await db.deleteAsset(Number(req.params.id)));
 }));
 
 app.get("/api/work-orders", asyncRoute(async (_req, res) => {
