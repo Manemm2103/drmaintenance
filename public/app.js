@@ -180,7 +180,7 @@ function renderWorkOrders(workOrders) {
         <div class="muted">${escapeHtml(order.description || "Keine Beschreibung")}</div>
       </td>
       <td>
-        ${escapeHtml(order.assetName || "Ohne Anlage")}
+        ${escapeHtml(order.assetName || "Ohne Objekt")}
         <div class="muted">${escapeHtml(order.location || "")}</div>
       </td>
       <td>${formatDate(order.dueDate)}</td>
@@ -265,7 +265,7 @@ function renderProperties(properties) {
   renderApartmentBuildingOptions(properties);
 
   if (!properties || properties.length === 0) {
-    els.propertyList.innerHTML = '<div class="list-item">Keine Objekte angelegt.</div>';
+    els.propertyList.innerHTML = '<div class="list-item">Keine Gebäude angelegt.</div>';
     return;
   }
 
@@ -345,7 +345,7 @@ function groupEventsByDate(events) {
 
 function renderAssetOptions(assets) {
   const currentValue = els.assetSelect.value;
-  els.assetSelect.innerHTML = '<option value="">Ohne Anlage</option>' + assets.map((asset) => (
+  els.assetSelect.innerHTML = '<option value="">Ohne Objekt</option>' + assets.map((asset) => (
     `<option value="${asset.id}">${escapeHtml(asset.name)}</option>`
   )).join("");
   els.assetSelect.value = currentValue;

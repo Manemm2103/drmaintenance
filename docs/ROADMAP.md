@@ -4,12 +4,12 @@
 
 - Docker Compose mit Web-App und MariaDB
 - Dashboard mit Kennzahlen
-- Anlagen, Wartungspläne und Aufträge als erste Datenmodelle
+- Wartungsobjekte, Wartungspläne und Aufträge als erste Datenmodelle
 - Seed-Daten für den ersten Start
 
 ## Phase 2: CMMS-Kern
 
-- CRUD-Masken für Anlagen, Pläne und Aufträge
+- CRUD-Masken für Wartungsobjekte, Pläne und Aufträge
 - Wiederkehrende Aufträge automatisch erzeugen
 - Statusworkflow mit Verantwortlichen und Kommentaren
 - Suche, Filter, Prioritäten und Fälligkeiten

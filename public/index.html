@@ -21,9 +21,9 @@
         <nav class="nav">
           <a href="#dashboard" class="active">Dashboard</a>
           <a href="#kalender">Kalender</a>
-          <a href="#objekte">Objekte</a>
+          <a href="#gebaeude">Gebäude</a>
           <a href="#auftraege">Aufträge</a>
-          <a href="#anlagen">Anlagen</a>
+          <a href="#wartungsobjekte">Objekte</a>
           <a href="#planung">Planung</a>
           <a href="#benutzer">Benutzer</a>
         </nav>
@@ -53,7 +53,7 @@
 
         <section class="kpi-grid" aria-label="Kennzahlen">
           <article class="metric-card">
-            <span>Anlagen</span>
+            <span>Wartungsobjekte</span>
             <strong id="assetCount">-</strong>
           </article>
           <article class="metric-card">
@@ -129,10 +129,10 @@
             </form>
           </article>
 
-          <article class="panel wide" id="objekte">
+          <article class="panel wide" id="gebaeude">
             <div class="panel-header">
               <div>
-                <p class="eyebrow">Objekte</p>
+                <p class="eyebrow">Gebäude</p>
                 <h2>Gebäude und Appartments</h2>
               </div>
             </div>
@@ -198,7 +198,7 @@
                 <thead>
                   <tr>
                     <th>Auftrag</th>
-                    <th>Anlage</th>
+                    <th>Objekt</th>
                     <th>Fällig</th>
                     <th>Status</th>
                     <th>Prio</th>
@@ -227,9 +227,9 @@
                 <input name="title" placeholder="z.B. Filter wechseln" required>
               </label>
               <label>
-                Anlage
+                Objekt
                 <select name="assetId" id="assetSelect">
-                  <option value="">Ohne Anlage</option>
+                  <option value="">Ohne Objekt</option>
                 </select>
               </label>
               <label>
@@ -253,11 +253,11 @@
             </form>
           </article>
 
-          <article class="panel" id="anlagen">
+          <article class="panel" id="wartungsobjekte">
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Inventar</p>
-                <h2>Anlagen</h2>
+                <h2>Wartungsobjekte</h2>
               </div>
             </div>
             <div class="asset-list" id="assetList"></div>

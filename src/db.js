@@ -268,10 +268,10 @@ async function seedInitialData() {
     `
       INSERT INTO assets (name, asset_type, location, serial_number, criticality)
       VALUES
-        ('Heizkreis Verteiler EG', 'HVAC', 'Technikraum EG', 'HVAC-EG-001', 'high'),
-        ('Torsteuerung Lager', 'Gebäudetechnik', 'Lagerhalle', 'TOR-LAG-024', 'medium'),
-        ('PV Wechselrichter 1', 'Energie', 'Dachzentrale', 'PV-WR-001', 'critical'),
-        ('Wasserentharter', 'Sanitär', 'Technikraum UG', 'SAN-WE-004', 'medium')
+        ('Klimaanlage Wellnessbereich', 'Klima', 'Wellnessbereich', 'KLIMA-001', 'high'),
+        ('Dampfbad Steuerung', 'Wellness', 'Spa-Bereich', 'DAMPF-001', 'critical'),
+        ('PV Wechselrichter 1', 'Energie', 'Dachzentrale', 'PV-WR-001', 'medium'),
+        ('Wasserenthärter', 'Sanitär', 'Technikraum UG', 'SAN-WE-004', 'medium')
     `
   );
 
@@ -279,8 +279,8 @@ async function seedInitialData() {
     `
       INSERT INTO maintenance_plans (asset_id, title, interval_days, last_done_on, next_due_on)
       VALUES
-        (?, 'Filter und Pumpengruppe prüfen', 90, CURDATE() - INTERVAL 70 DAY, CURDATE() + INTERVAL 20 DAY),
-        (?, 'Sicherheitsabschaltung testen', 180, CURDATE() - INTERVAL 150 DAY, CURDATE() + INTERVAL 30 DAY),
+        (?, 'Filter und Kondensatablauf prüfen', 90, CURDATE() - INTERVAL 70 DAY, CURDATE() + INTERVAL 20 DAY),
+        (?, 'Dampfgenerator und Türdichtung prüfen', 180, CURDATE() - INTERVAL 150 DAY, CURDATE() + INTERVAL 30 DAY),
         (?, 'Ertragsdaten und Lüfter prüfen', 60, CURDATE() - INTERVAL 65 DAY, CURDATE() - INTERVAL 5 DAY),
         (?, 'Salzstand und Harzspülung prüfen', 45, CURDATE() - INTERVAL 35 DAY, CURDATE() + INTERVAL 10 DAY)
     `,
@@ -296,14 +296,14 @@ async function seedInitialData() {
     `
       INSERT INTO work_orders (asset_id, title, description, priority, status, due_date)
       VALUES
-        (?, 'PV Wechselrichter Wartung überfällig', 'Lüfter reinigen und Fehlerhistorie prüfen.', 'critical', 'open', CURDATE() - INTERVAL 5 DAY),
-        (?, 'Wasserentharter Service vorbereiten', 'Salzbestand auffüllen, Wasserhärte messen.', 'medium', 'planned', CURDATE() + INTERVAL 10 DAY),
-        (?, 'Torsteuerung Sichtprüfung', 'Lichtschranken und Not-Aus testen.', 'medium', 'in_progress', CURDATE() + INTERVAL 3 DAY)
+        (?, 'Dampfbad Wartung überfällig', 'Dampfgenerator entkalken und Temperaturfühler prüfen.', 'critical', 'open', CURDATE() - INTERVAL 5 DAY),
+        (?, 'Wasserenthärter Service vorbereiten', 'Salzbestand auffüllen, Wasserhärte messen.', 'medium', 'planned', CURDATE() + INTERVAL 10 DAY),
+        (?, 'Klimaanlage Sichtprüfung', 'Filtereinsatz und Kondensatablauf prüfen.', 'medium', 'in_progress', CURDATE() + INTERVAL 3 DAY)
     `,
     [
-      assetResult.insertId + 2,
+      assetResult.insertId + 1,
       assetResult.insertId + 3,
-      assetResult.insertId + 1
+      assetResult.insertId
     ]
   );
 
@@ -313,8 +313,9 @@ async function seedInitialData() {
       VALUES
         ('system', 1, 'Startdaten für DR Maintenance angelegt.'),
         ('work_order', 1, 'Erster kritischer Auftrag erstellt.'),
-        ('asset', 3, 'PV Wechselrichter als kritisch markiert.')
-    `
+        ('asset', ?, 'Dampfbad als kritisch markiert.')
+    `,
+    [assetResult.insertId + 1]
   );
 }
 
@@ -382,7 +383,10 @@ async function normalizeGermanText() {
     ["geloescht", "gelöscht"],
     ["veraendert", "verändert"],
     ["Faelligkeit", "Fälligkeit"],
-    ["koennen", "können"]
+    ["koennen", "können"],
+    ["Anlagen", "Wartungsobjekte"],
+    ["Anlage", "Wartungsobjekt"],
+    ["ausgewaehlte", "ausgewählte"]
   ];
 
   const columns = [
@@ -987,7 +991,7 @@ async function assertMaintenanceTarget(targetType, targetId) {
   if (targetType === "asset") {
     const [[asset]] = await pool.execute("SELECT id FROM assets WHERE id = ?", [targetId]);
     if (!asset) {
-      throw createError("Die ausgewaehlte Anlage existiert nicht.", 400);
+      throw createError("Das ausgewählte Objekt existiert nicht.", 400);
     }
     return;
   }
@@ -995,7 +999,7 @@ async function assertMaintenanceTarget(targetType, targetId) {
   if (targetType === "apartment") {
     const [[apartment]] = await pool.execute("SELECT id FROM apartments WHERE id = ?", [targetId]);
     if (!apartment) {
-      throw createError("Das ausgewaehlte Appartment existiert nicht.", 400);
+      throw createError("Das ausgewählte Appartment existiert nicht.", 400);
     }
     return;
   }
@@ -1153,7 +1157,7 @@ async function createAsset(input) {
 
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
-    [result.insertId, `Anlage "${input.name}" angelegt.`]
+    [result.insertId, `Wartungsobjekt "${input.name}" angelegt.`]
   );
 
   return getAssetById(result.insertId);
