@@ -309,6 +309,15 @@ h2 {
   margin-bottom: 14px;
 }
 
+.view {
+  display: none;
+}
+
+.view.is-active {
+  display: block;
+  margin-bottom: 14px;
+}
+
 .metric-card,
 .panel {
   border: 1px solid var(--line);
@@ -348,6 +357,14 @@ h2 {
   display: grid;
   grid-template-columns: minmax(0, 1.45fr) minmax(320px, 0.7fr);
   gap: 14px;
+}
+
+.single-view-grid {
+  grid-template-columns: 1fr;
+}
+
+.single-view-grid .panel {
+  grid-column: 1 / -1;
 }
 
 .panel {
@@ -634,6 +651,13 @@ textarea {
   background: #fbfbf8;
 }
 
+.property-card-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 12px;
+}
+
 .apartment-list {
   display: grid;
   gap: 7px;
@@ -641,6 +665,7 @@ textarea {
 
 .apartment-chip {
   display: flex;
+  align-items: center;
   justify-content: space-between;
   gap: 10px;
   padding: 9px 10px;
@@ -727,6 +752,10 @@ textarea {
   .users-layout,
   .property-layout {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .single-view-grid {
+    grid-template-columns: 1fr;
   }
 
   .calendar-day {

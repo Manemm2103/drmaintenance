@@ -3,6 +3,12 @@ const els = {
   appVersion: document.querySelector("#appVersion"),
   currentUser: document.querySelector("#currentUser"),
   logoutButton: document.querySelector("#logoutButton"),
+  pageEyebrow: document.querySelector("#pageEyebrow"),
+  pageTitle: document.querySelector("#pageTitle"),
+  pageAction: document.querySelector("#pageAction"),
+  pageActionLabel: document.querySelector("#pageActionLabel"),
+  views: document.querySelectorAll("[data-view]"),
+  viewLinks: document.querySelectorAll("[data-view-link]"),
   assetCount: document.querySelector("#assetCount"),
   planCount: document.querySelector("#planCount"),
   orderCount: document.querySelector("#orderCount"),
@@ -58,6 +64,61 @@ const buildingTypeLabels = {
   multi_family: "Mehrfamilienhaus",
   commercial: "Gewerbe",
   other: "Sonstiges"
+};
+
+const viewConfig = {
+  dashboard: {
+    eyebrow: "Wartungsplaner",
+    title: "Alles Wichtige auf einen Blick.",
+    actionLabel: "Wartungsplan",
+    actionTitle: "Neuen Wartungsplan erfassen",
+    actionView: "planung",
+    scrollTarget: "new-maintenance"
+  },
+  wartungsobjekte: {
+    eyebrow: "Inventar",
+    title: "Wartungsobjekte verwalten.",
+    actionLabel: "Objekt",
+    actionTitle: "Neues Wartungsobjekt erfassen",
+    actionView: "wartungsobjekte",
+    scrollTarget: "assetForm"
+  },
+  gebaeude: {
+    eyebrow: "Gebäude",
+    title: "Gebäude und Appartments verwalten.",
+    actionLabel: "Gebäude",
+    actionTitle: "Neues Gebäude erfassen",
+    actionView: "gebaeude",
+    scrollTarget: "buildingForm"
+  },
+  planung: {
+    eyebrow: "Planung",
+    title: "Wartungspläne verwalten.",
+    actionLabel: "Wartungsplan",
+    actionTitle: "Neuen Wartungsplan erfassen",
+    actionView: "planung",
+    scrollTarget: "new-maintenance"
+  },
+  benutzer: {
+    eyebrow: "Administration",
+    title: "Benutzer verwalten.",
+    actionLabel: "Benutzer",
+    actionTitle: "Neuen Benutzer anlegen",
+    actionView: "benutzer",
+    scrollTarget: "userForm"
+  }
+};
+
+const hashViewMap = {
+  dashboard: "dashboard",
+  kalender: "dashboard",
+  auftraege: "dashboard",
+  "new-work-order": "dashboard",
+  wartungsobjekte: "wartungsobjekte",
+  gebaeude: "gebaeude",
+  planung: "planung",
+  "new-maintenance": "planung",
+  benutzer: "benutzer"
 };
 
 let visibleMonth = startOfMonth(new Date());
@@ -125,6 +186,48 @@ function showToast(message) {
   els.toast.textContent = message;
   els.toast.classList.add("show");
   window.setTimeout(() => els.toast.classList.remove("show"), 2400);
+}
+
+function scrollToTarget(targetId) {
+  document.getElementById(targetId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+
+function setView(viewName, options = {}) {
+  const nextView = viewConfig[viewName] ? viewName : "dashboard";
+  const config = viewConfig[nextView];
+
+  els.views.forEach((view) => {
+    view.classList.toggle("is-active", view.dataset.view === nextView);
+  });
+
+  els.viewLinks.forEach((link) => {
+    link.classList.toggle("active", link.dataset.viewLink === nextView);
+  });
+
+  els.pageEyebrow.textContent = config.eyebrow;
+  els.pageTitle.textContent = config.title;
+  els.pageActionLabel.textContent = config.actionLabel;
+  els.pageAction.title = config.actionTitle;
+  els.pageAction.dataset.viewTarget = config.actionView;
+  els.pageAction.dataset.scrollTarget = config.scrollTarget;
+
+  if (options.updateHash !== false && window.location.hash !== `#${nextView}`) {
+    window.history.pushState(null, "", `#${nextView}`);
+  }
+
+  if (options.scrollTop !== false) {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+}
+
+function showViewFromHash() {
+  const hash = decodeURIComponent(window.location.hash.replace(/^#/, ""));
+  const viewName = hashViewMap[hash] || "dashboard";
+  setView(viewName, { updateHash: false, scrollTop: false });
+
+  if (hash && hash !== viewName && hashViewMap[hash]) {
+    window.setTimeout(() => scrollToTarget(hash), 0);
+  }
 }
 
 function setConnectionStatus(ok) {
@@ -284,21 +387,27 @@ function renderProperties(properties) {
 
   els.propertyList.innerHTML = properties.map((building) => `
     <div class="property-card">
-      <div>
-        <strong>${escapeHtml(building.name)}</strong>
-        <div class="list-meta">
-          <span>${buildingTypeLabels[building.buildingType] || building.buildingType}</span>
-          <span>${escapeHtml(building.address || "Keine Adresse")}</span>
-          <span>${building.apartments.length === 0 ? "Als Wartungsobjekt verfügbar" : `${building.apartments.length} Appartments`}</span>
+      <div class="property-card-header">
+        <div>
+          <strong>${escapeHtml(building.name)}</strong>
+          <div class="list-meta">
+            <span>${buildingTypeLabels[building.buildingType] || building.buildingType}</span>
+            <span>${escapeHtml(building.address || "Keine Adresse")}</span>
+            <span>${building.apartments.length === 0 ? "Als Wartungsobjekt verfügbar" : `${building.apartments.length} Appartments`}</span>
+          </div>
         </div>
+        <button class="compact-button" type="button" title="Gebäude löschen" aria-label="Gebäude löschen" data-delete-building="${building.id}">X</button>
       </div>
       ${building.apartments.length === 0
         ? '<span class="badge light">Gebäude ohne Appartments</span>'
         : `<div class="apartment-list">
             ${building.apartments.map((apartment) => `
               <div class="apartment-chip">
-                <span>${escapeHtml(apartment.name)}</span>
-                <span class="muted">${escapeHtml(apartment.apartmentNumber)}${apartment.floor ? ` - ${escapeHtml(apartment.floor)}` : ""}</span>
+                <div>
+                  <span>${escapeHtml(apartment.name)}</span>
+                  <span class="muted">${escapeHtml(apartment.apartmentNumber)}${apartment.floor ? ` - ${escapeHtml(apartment.floor)}` : ""}</span>
+                </div>
+                <button class="compact-button" type="button" title="Appartment löschen" aria-label="Appartment löschen" data-delete-apartment="${apartment.id}">X</button>
               </div>
             `).join("")}
           </div>`
@@ -451,6 +560,30 @@ async function deleteMaintenancePlan(id) {
   await loadDashboard();
 }
 
+async function deleteBuilding(id) {
+  if (!window.confirm("Gebäude wirklich löschen? Appartments und zugehörige Wartungspläne werden ebenfalls entfernt.")) {
+    return;
+  }
+
+  await api(`/api/buildings/${id}`, {
+    method: "DELETE"
+  });
+  showToast("Gebäude gelöscht.");
+  await loadDashboard();
+}
+
+async function deleteApartment(id) {
+  if (!window.confirm("Appartment wirklich löschen? Zugehörige Wartungspläne werden ebenfalls entfernt.")) {
+    return;
+  }
+
+  await api(`/api/apartments/${id}`, {
+    method: "DELETE"
+  });
+  showToast("Appartment gelöscht.");
+  await loadDashboard();
+}
+
 async function logout() {
   await api("/api/auth/logout", {
     method: "POST",
@@ -461,7 +594,8 @@ async function logout() {
 
 function setMaintenanceDate(dateKey) {
   els.maintenanceDueDate.value = dateKey;
-  document.querySelector("#new-maintenance").scrollIntoView({ behavior: "smooth" });
+  setView("planung", { updateHash: true, scrollTop: false });
+  window.setTimeout(() => scrollToTarget("new-maintenance"), 0);
   showToast(`Wartungsplan für ${formatDate(dateKey)} vorbereiten.`);
 }
 
@@ -474,6 +608,16 @@ function parseTargetValue(value) {
 }
 
 function bindEvents() {
+  els.viewLinks.forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      setView(link.dataset.viewLink, { updateHash: true });
+    });
+  });
+
+  window.addEventListener("hashchange", showViewFromHash);
+  window.addEventListener("popstate", showViewFromHash);
+
   els.refreshButton.addEventListener("click", loadDashboard);
   els.logoutButton.addEventListener("click", () => {
     logout().catch((error) => showToast(error.message));
@@ -492,7 +636,10 @@ function bindEvents() {
   document.addEventListener("click", (event) => {
     const scrollTarget = event.target.closest("[data-scroll-target]");
     if (scrollTarget) {
-      document.querySelector(`#${scrollTarget.dataset.scrollTarget}`)?.scrollIntoView({ behavior: "smooth" });
+      if (scrollTarget.dataset.viewTarget) {
+        setView(scrollTarget.dataset.viewTarget, { updateHash: true, scrollTop: false });
+      }
+      window.setTimeout(() => scrollToTarget(scrollTarget.dataset.scrollTarget), 0);
     }
 
     const calendarDay = event.target.closest("[data-calendar-day]");
@@ -518,6 +665,16 @@ function bindEvents() {
     const deletePlanButton = event.target.closest("[data-delete-plan]");
     if (deletePlanButton) {
       deleteMaintenancePlan(deletePlanButton.dataset.deletePlan).catch((error) => showToast(error.message));
+    }
+
+    const deleteBuildingButton = event.target.closest("[data-delete-building]");
+    if (deleteBuildingButton) {
+      deleteBuilding(deleteBuildingButton.dataset.deleteBuilding).catch((error) => showToast(error.message));
+    }
+
+    const deleteApartmentButton = event.target.closest("[data-delete-apartment]");
+    if (deleteApartmentButton) {
+      deleteApartment(deleteApartmentButton.dataset.deleteApartment).catch((error) => showToast(error.message));
     }
   });
 
@@ -641,6 +798,7 @@ function bindEvents() {
 }
 
 bindEvents();
+showViewFromHash();
 loadAppVersion();
 loadCurrentUser().catch(() => {
   window.location.href = "/login";

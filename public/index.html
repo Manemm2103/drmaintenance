@@ -19,13 +19,11 @@
         </a>
 
         <nav class="nav">
-          <a href="#dashboard" class="active">Dashboard</a>
-          <a href="#kalender">Kalender</a>
-          <a href="#gebaeude">Gebäude</a>
-          <a href="#auftraege">Aufträge</a>
-          <a href="#wartungsobjekte">Objekte</a>
-          <a href="#planung">Planung</a>
-          <a href="#benutzer">Benutzer</a>
+          <a href="#dashboard" class="active" data-view-link="dashboard">Dashboard</a>
+          <a href="#wartungsobjekte" data-view-link="wartungsobjekte">Objekte</a>
+          <a href="#gebaeude" data-view-link="gebaeude">Gebäude</a>
+          <a href="#planung" data-view-link="planung">Wartungspläne</a>
+          <a href="#benutzer" data-view-link="benutzer">Benutzer</a>
         </nav>
 
         <div class="sidebar-footer">
@@ -39,42 +37,43 @@
         </div>
       </aside>
 
-      <main class="main" id="dashboard">
+      <main class="main">
         <header class="topbar">
           <div>
-            <p class="eyebrow">Wartungsplaner</p>
-            <h1>Alles Wichtige auf einen Blick.</h1>
+            <p class="eyebrow" id="pageEyebrow">Wartungsplaner</p>
+            <h1 id="pageTitle">Alles Wichtige auf einen Blick.</h1>
           </div>
-          <button class="primary-button" type="button" data-scroll-target="new-maintenance" title="Neuen Wartungsplan erfassen">
+          <button class="primary-button" type="button" id="pageAction" data-view-target="planung" data-scroll-target="new-maintenance" title="Neuen Wartungsplan erfassen">
             <span aria-hidden="true">+</span>
-            Wartungsplan
+            <span id="pageActionLabel">Wartungsplan</span>
           </button>
         </header>
 
-        <section class="kpi-grid" aria-label="Kennzahlen">
-          <article class="metric-card">
-            <span>Wartungsobjekte</span>
-            <strong id="assetCount">-</strong>
-          </article>
-          <article class="metric-card">
-            <span>Aktive Pläne</span>
-            <strong id="planCount">-</strong>
-          </article>
-          <article class="metric-card">
-            <span>Offene Aufträge</span>
-            <strong id="orderCount">-</strong>
-          </article>
-          <article class="metric-card urgent">
-            <span>Überfällig</span>
-            <strong id="overdueCount">-</strong>
-          </article>
-          <article class="metric-card">
-            <span>Aktive Benutzer</span>
-            <strong id="userCount">-</strong>
-          </article>
-        </section>
+        <section class="view is-active" data-view="dashboard">
+          <section class="kpi-grid" aria-label="Kennzahlen">
+            <article class="metric-card">
+              <span>Wartungsobjekte</span>
+              <strong id="assetCount">-</strong>
+            </article>
+            <article class="metric-card">
+              <span>Aktive Pläne</span>
+              <strong id="planCount">-</strong>
+            </article>
+            <article class="metric-card">
+              <span>Offene Aufträge</span>
+              <strong id="orderCount">-</strong>
+            </article>
+            <article class="metric-card urgent">
+              <span>Überfällig</span>
+              <strong id="overdueCount">-</strong>
+            </article>
+            <article class="metric-card">
+              <span>Aktive Benutzer</span>
+              <strong id="userCount">-</strong>
+            </article>
+          </section>
 
-        <section class="workspace-grid">
+          <section class="workspace-grid">
           <article class="panel full" id="kalender">
             <div class="panel-header">
               <div>
@@ -99,36 +98,11 @@
             <div class="calendar-grid" id="calendarGrid" aria-label="Wartungskalender"></div>
           </article>
 
-          <article class="panel wide" id="new-maintenance">
-            <div class="panel-header">
-              <div>
-                <p class="eyebrow">Planung</p>
-                <h2>Wartungsplan anlegen</h2>
-              </div>
-            </div>
-            <form id="maintenanceForm" class="form-grid">
-              <label>
-                Titel
-                <input name="title" placeholder="z.B. Rauchmelder prüfen" required>
-              </label>
-              <label>
-                Objekt
-                <select name="target" id="maintenanceTargetSelect" required>
-                  <option value="">Objekt auswählen</option>
-                </select>
-              </label>
-              <label>
-                Intervall in Tagen
-                <input name="intervalDays" type="number" min="1" value="365" required>
-              </label>
-              <label>
-                Fällig am
-                <input name="nextDueOn" id="maintenanceDueDate" type="date" required>
-              </label>
-              <button class="primary-button span-2" type="submit">Wartungsplan speichern</button>
-            </form>
-          </article>
+          </section>
+        </section>
 
+        <section class="view" data-view="gebaeude">
+          <section class="workspace-grid single-view-grid">
           <article class="panel wide" id="gebaeude">
             <div class="panel-header">
               <div>
@@ -184,7 +158,11 @@
               <div class="property-list" id="propertyList"></div>
             </div>
           </article>
+          </section>
+        </section>
 
+        <section class="view" data-view="dashboard">
+          <section class="workspace-grid">
           <article class="panel wide" id="auftraege">
             <div class="panel-header">
               <div>
@@ -252,7 +230,11 @@
               <button class="primary-button span-2" type="submit">Auftrag speichern</button>
             </form>
           </article>
+          </section>
+        </section>
 
+        <section class="view" data-view="wartungsobjekte">
+          <section class="workspace-grid single-view-grid">
           <article class="panel" id="wartungsobjekte">
             <div class="panel-header">
               <div>
@@ -290,6 +272,40 @@
             </form>
             <div class="asset-list" id="assetList"></div>
           </article>
+          </section>
+        </section>
+
+        <section class="view" data-view="planung">
+          <section class="workspace-grid">
+          <article class="panel wide" id="new-maintenance">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Planung</p>
+                <h2>Wartungsplan anlegen</h2>
+              </div>
+            </div>
+            <form id="maintenanceForm" class="form-grid">
+              <label>
+                Titel
+                <input name="title" placeholder="z.B. Rauchmelder prüfen" required>
+              </label>
+              <label>
+                Objekt
+                <select name="target" id="maintenanceTargetSelect" required>
+                  <option value="">Objekt auswählen</option>
+                </select>
+              </label>
+              <label>
+                Intervall in Tagen
+                <input name="intervalDays" type="number" min="1" value="365" required>
+              </label>
+              <label>
+                Fällig am
+                <input name="nextDueOn" id="maintenanceDueDate" type="date" required>
+              </label>
+              <button class="primary-button span-2" type="submit">Wartungsplan speichern</button>
+            </form>
+          </article>
 
           <article class="panel" id="planung">
             <div class="panel-header">
@@ -300,7 +316,11 @@
             </div>
             <div class="plan-list" id="planList"></div>
           </article>
+          </section>
+        </section>
 
+        <section class="view" data-view="benutzer">
+          <section class="workspace-grid single-view-grid">
           <article class="panel wide" id="benutzer">
             <div class="panel-header">
               <div>
@@ -340,7 +360,11 @@
               <div class="user-list" id="userList"></div>
             </div>
           </article>
+          </section>
+        </section>
 
+        <section class="view" data-view="dashboard">
+          <section class="workspace-grid single-view-grid">
           <article class="panel">
             <div class="panel-header">
               <div>
@@ -350,6 +374,7 @@
             </div>
             <div class="timeline" id="activityList"></div>
           </article>
+          </section>
         </section>
       </main>
     </div>

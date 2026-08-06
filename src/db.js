@@ -876,6 +876,45 @@ async function getBuildingById(id) {
   return building;
 }
 
+async function deleteBuilding(id) {
+  const existingBuilding = await getBuildingById(id);
+  if (!existingBuilding) {
+    throw createError("Gebäude nicht gefunden.", 404);
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.execute(
+      `
+        DELETE mp
+        FROM maintenance_plans mp
+        INNER JOIN apartments a ON a.id = mp.target_id
+        WHERE mp.target_type = 'apartment'
+          AND a.building_id = ?
+      `,
+      [id]
+    );
+    await connection.execute(
+      "DELETE FROM maintenance_plans WHERE target_type = 'building' AND target_id = ?",
+      [id]
+    );
+    await connection.execute("DELETE FROM buildings WHERE id = ?", [id]);
+    await connection.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('building', ?, ?)",
+      [id, `Gebäude "${existingBuilding.name}" gelöscht.`]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+
+  return { deleted: true };
+}
+
 async function createApartment(input) {
   const buildingId = Number(input.buildingId);
   const apartmentNumber = input.apartmentNumber?.trim();
@@ -935,6 +974,35 @@ async function getApartmentById(id) {
     [id]
   );
   return apartment;
+}
+
+async function deleteApartment(id) {
+  const existingApartment = await getApartmentById(id);
+  if (!existingApartment) {
+    throw createError("Appartment nicht gefunden.", 404);
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.execute(
+      "DELETE FROM maintenance_plans WHERE target_type = 'apartment' AND target_id = ?",
+      [id]
+    );
+    await connection.execute("DELETE FROM apartments WHERE id = ?", [id]);
+    await connection.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('apartment', ?, ?)",
+      [id, `Appartment "${existingApartment.name}" gelöscht.`]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+
+  return { deleted: true };
 }
 
 async function listMaintenanceTargets() {
@@ -1321,7 +1389,9 @@ module.exports = {
   deleteUser,
   listProperties,
   createBuilding,
+  deleteBuilding,
   createApartment,
+  deleteApartment,
   listMaintenanceTargets,
   createMaintenancePlan,
   deleteMaintenancePlan,
