@@ -244,6 +244,7 @@
               </div>
             </div>
             <form id="assetForm" class="form-grid compact-form">
+              <input type="hidden" name="assetId" id="assetIdInput">
               <label>
                 Name
                 <input name="name" placeholder="z.B. Klimaanlage Wellnessbereich" required>
@@ -269,7 +270,10 @@
                   <option value="critical">Kritisch</option>
                 </select>
               </label>
-              <button class="primary-button span-2" type="submit">Objekt speichern</button>
+              <div class="form-actions span-2">
+                <button class="primary-button" type="submit" id="assetSubmitButton">Objekt speichern</button>
+                <button class="ghost-button" type="button" id="assetNewButton">Neu</button>
+              </div>
             </form>
             <div class="asset-list" id="assetList"></div>
           </article>
@@ -290,12 +294,15 @@
                 Titel
                 <input name="title" placeholder="z.B. Rauchmelder prüfen" required>
               </label>
-              <label>
-                Objekt
-                <select name="target" id="maintenanceTargetSelect" required>
-                  <option value="">Objekt auswählen</option>
-                </select>
-              </label>
+              <div class="target-field span-2">
+                <label>
+                  Wartungsziel
+                  <select name="target" id="maintenanceTargetSelect" required>
+                    <option value="">Objekt, Gebäude oder Appartment auswählen</option>
+                  </select>
+                </label>
+                <button class="ghost-button" type="button" data-view-target="wartungsobjekte" data-scroll-target="assetForm">Objekt anlegen</button>
+              </div>
               <label>
                 Intervall in Tagen
                 <input name="intervalDays" type="number" min="1" value="365" required>

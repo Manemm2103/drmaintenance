@@ -280,6 +280,11 @@ app.post("/api/assets", asyncRoute(async (req, res) => {
   res.status(201).json(asset);
 }));
 
+app.patch("/api/assets/:id", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["name", "assetType", "location"]);
+  res.json(await db.updateAsset(Number(req.params.id), req.body));
+}));
+
 app.delete("/api/assets/:id", asyncRoute(async (req, res) => {
   res.json(await db.deleteAsset(Number(req.params.id)));
 }));

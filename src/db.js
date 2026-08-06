@@ -1221,7 +1221,7 @@ async function listAssets() {
   return rows;
 }
 
-async function createAsset(input) {
+function normalizeAssetInput(input) {
   const name = input.name?.trim();
   const assetType = input.assetType?.trim();
   const location = input.location?.trim();
@@ -1237,23 +1237,34 @@ async function createAsset(input) {
     throw createError("Ungültige Kritikalität.", 400);
   }
 
+  return {
+    name,
+    assetType,
+    location,
+    serialNumber,
+    criticality
+  };
+}
+
+async function createAsset(input) {
+  const asset = normalizeAssetInput(input);
   const [result] = await pool.execute(
     `
       INSERT INTO assets (name, asset_type, location, serial_number, criticality)
       VALUES (?, ?, ?, ?, ?)
     `,
     [
-      name,
-      assetType,
-      location,
-      serialNumber,
-      criticality
+      asset.name,
+      asset.assetType,
+      asset.location,
+      asset.serialNumber,
+      asset.criticality
     ]
   );
 
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
-    [result.insertId, `Wartungsobjekt "${name}" angelegt.`]
+    [result.insertId, `Wartungsobjekt "${asset.name}" angelegt.`]
   );
 
   return getAssetById(result.insertId);
@@ -1269,6 +1280,37 @@ async function getAssetById(id) {
     [id]
   );
   return row;
+}
+
+async function updateAsset(id, input) {
+  const existingAsset = await getAssetById(id);
+  if (!existingAsset) {
+    throw createError("Wartungsobjekt nicht gefunden.", 404);
+  }
+
+  const asset = normalizeAssetInput(input);
+  await pool.execute(
+    `
+      UPDATE assets
+      SET name = ?, asset_type = ?, location = ?, serial_number = ?, criticality = ?
+      WHERE id = ?
+    `,
+    [
+      asset.name,
+      asset.assetType,
+      asset.location,
+      asset.serialNumber,
+      asset.criticality,
+      id
+    ]
+  );
+
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
+    [id, `Wartungsobjekt "${asset.name}" aktualisiert.`]
+  );
+
+  return getAssetById(id);
 }
 
 async function deleteAsset(id) {
@@ -1398,6 +1440,7 @@ module.exports = {
   getCalendarEvents,
   listAssets,
   createAsset,
+  updateAsset,
   deleteAsset,
   listWorkOrders,
   createWorkOrder,

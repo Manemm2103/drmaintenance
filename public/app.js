@@ -32,6 +32,9 @@ const els = {
   workOrderForm: document.querySelector("#workOrderForm"),
   maintenanceForm: document.querySelector("#maintenanceForm"),
   assetForm: document.querySelector("#assetForm"),
+  assetIdInput: document.querySelector("#assetIdInput"),
+  assetSubmitButton: document.querySelector("#assetSubmitButton"),
+  assetNewButton: document.querySelector("#assetNewButton"),
   buildingForm: document.querySelector("#buildingForm"),
   apartmentForm: document.querySelector("#apartmentForm"),
   userForm: document.querySelector("#userForm"),
@@ -122,6 +125,7 @@ const hashViewMap = {
 };
 
 let visibleMonth = startOfMonth(new Date());
+let latestAssets = [];
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -259,6 +263,7 @@ async function loadCurrentUser() {
 
 function renderSummary(payload) {
   const { summary, workOrders, assets, plans, activity, users } = payload;
+  latestAssets = assets || [];
 
   els.assetCount.textContent = summary.assetCount;
   els.planCount.textContent = summary.activePlanCount;
@@ -307,7 +312,7 @@ function renderAssets(assets) {
   }
 
   els.assetList.innerHTML = assets.map((asset) => `
-    <div class="list-item list-item-with-actions">
+    <div class="list-item list-item-with-actions clickable-list-item" role="button" tabindex="0" data-edit-asset="${asset.id}" title="Wartungsobjekt bearbeiten">
       <div>
         <strong>${escapeHtml(asset.name)}</strong>
         <div class="list-meta">
@@ -317,7 +322,10 @@ function renderAssets(assets) {
           ${asset.serialNumber ? `<span>${escapeHtml(asset.serialNumber)}</span>` : ""}
         </div>
       </div>
-      <button class="compact-button" type="button" title="Wartungsobjekt löschen" aria-label="Wartungsobjekt löschen" data-delete-asset="${asset.id}">X</button>
+      <div class="inline-actions">
+        <button class="compact-button" type="button" title="Wartungsobjekt duplizieren" aria-label="Wartungsobjekt duplizieren" data-duplicate-asset="${asset.id}">Kopie</button>
+        <button class="compact-button" type="button" title="Wartungsobjekt löschen" aria-label="Wartungsobjekt löschen" data-delete-asset="${asset.id}">X</button>
+      </div>
     </div>
   `).join("");
 }
@@ -486,10 +494,50 @@ function renderApartmentBuildingOptions(properties) {
 
 function renderMaintenanceTargetOptions(targets) {
   const currentValue = els.maintenanceTargetSelect.value;
-  els.maintenanceTargetSelect.innerHTML = '<option value="">Objekt auswählen</option>' + targets.map((target) => (
+  els.maintenanceTargetSelect.innerHTML = '<option value="">Objekt, Gebäude oder Appartment auswählen</option>' + targets.map((target) => (
     `<option value="${target.targetType}:${target.targetId}">${escapeHtml(target.label)} - ${escapeHtml(target.subtitle || "")}</option>`
   )).join("");
   els.maintenanceTargetSelect.value = currentValue;
+}
+
+function getAssetFormPayload() {
+  const data = Object.fromEntries(new FormData(els.assetForm));
+  return {
+    id: data.assetId ? Number(data.assetId) : null,
+    name: data.name,
+    assetType: data.assetType,
+    location: data.location,
+    serialNumber: data.serialNumber,
+    criticality: data.criticality
+  };
+}
+
+function resetAssetForm() {
+  els.assetForm.reset();
+  els.assetIdInput.value = "";
+  els.assetSubmitButton.textContent = "Objekt speichern";
+}
+
+function loadAssetIntoForm(asset) {
+  els.assetForm.elements.assetId.value = asset.id;
+  els.assetForm.elements.name.value = asset.name || "";
+  els.assetForm.elements.assetType.value = asset.assetType || "";
+  els.assetForm.elements.location.value = asset.location || "";
+  els.assetForm.elements.serialNumber.value = asset.serialNumber || "";
+  els.assetForm.elements.criticality.value = asset.criticality || "medium";
+  els.assetSubmitButton.textContent = "Änderungen speichern";
+  setView("wartungsobjekte", { updateHash: true, scrollTop: false });
+  window.setTimeout(() => scrollToTarget("assetForm"), 0);
+}
+
+function duplicateAssetInForm(asset) {
+  loadAssetIntoForm({
+    ...asset,
+    id: "",
+    name: `${asset.name} Kopie`
+  });
+  els.assetIdInput.value = "";
+  els.assetSubmitButton.textContent = "Kopie speichern";
 }
 
 function escapeHtml(value) {
@@ -673,7 +721,19 @@ function bindEvents() {
 
     const deleteAssetButton = event.target.closest("[data-delete-asset]");
     if (deleteAssetButton) {
+      event.stopPropagation();
       deleteAsset(deleteAssetButton.dataset.deleteAsset).catch((error) => showToast(error.message));
+      return;
+    }
+
+    const duplicateAssetButton = event.target.closest("[data-duplicate-asset]");
+    if (duplicateAssetButton) {
+      event.stopPropagation();
+      const asset = latestAssets.find((item) => String(item.id) === String(duplicateAssetButton.dataset.duplicateAsset));
+      if (asset) {
+        duplicateAssetInForm(asset);
+      }
+      return;
     }
 
     const deletePlanButton = event.target.closest("[data-delete-plan]");
@@ -689,6 +749,31 @@ function bindEvents() {
     const deleteApartmentButton = event.target.closest("[data-delete-apartment]");
     if (deleteApartmentButton) {
       deleteApartment(deleteApartmentButton.dataset.deleteApartment).catch((error) => showToast(error.message));
+    }
+
+    const editAsset = event.target.closest("[data-edit-asset]");
+    if (editAsset) {
+      const asset = latestAssets.find((item) => String(item.id) === String(editAsset.dataset.editAsset));
+      if (asset) {
+        loadAssetIntoForm(asset);
+      }
+    }
+  });
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") {
+      return;
+    }
+
+    const editAsset = event.target.closest("[data-edit-asset]");
+    if (!editAsset || event.target.closest("button")) {
+      return;
+    }
+
+    event.preventDefault();
+    const asset = latestAssets.find((item) => String(item.id) === String(editAsset.dataset.editAsset));
+    if (asset) {
+      loadAssetIntoForm(asset);
     }
   });
 
@@ -735,10 +820,11 @@ function bindEvents() {
 
   els.assetForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    const data = Object.fromEntries(new FormData(els.assetForm));
+    const data = getAssetFormPayload();
+    const isUpdate = Boolean(data.id);
 
-    await api("/api/assets", {
-      method: "POST",
+    await api(isUpdate ? `/api/assets/${data.id}` : "/api/assets", {
+      method: isUpdate ? "PATCH" : "POST",
       body: JSON.stringify({
         name: data.name,
         assetType: data.assetType,
@@ -748,10 +834,12 @@ function bindEvents() {
       })
     });
 
-    els.assetForm.reset();
-    showToast("Wartungsobjekt gespeichert.");
+    resetAssetForm();
+    showToast(isUpdate ? "Wartungsobjekt aktualisiert." : "Wartungsobjekt gespeichert.");
     await loadDashboard();
   });
+
+  els.assetNewButton.addEventListener("click", resetAssetForm);
 
   els.buildingForm.addEventListener("submit", async (event) => {
     event.preventDefault();
