@@ -203,7 +203,7 @@ h2 {
 
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(160px, 1fr));
+  grid-template-columns: repeat(5, minmax(140px, 1fr));
   gap: 14px;
   margin-bottom: 14px;
 }
@@ -376,6 +376,7 @@ textarea {
 }
 
 .asset-list,
+.user-list,
 .plan-list,
 .timeline {
   display: grid;
@@ -383,6 +384,7 @@ textarea {
 }
 
 .list-item,
+.user-item,
 .timeline-item {
   display: grid;
   gap: 5px;
@@ -393,8 +395,34 @@ textarea {
 }
 
 .list-item strong,
+.user-item strong,
 .timeline-item strong {
   font-size: 0.95rem;
+}
+
+.users-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.user-item {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.system-note {
+  color: var(--muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
 }
 
 .list-meta {
@@ -451,7 +479,8 @@ textarea {
   }
 
   .workspace-grid,
-  .kpi-grid {
+  .kpi-grid,
+  .users-layout {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -470,7 +499,8 @@ textarea {
 
   .workspace-grid,
   .kpi-grid,
-  .form-grid {
+  .form-grid,
+  .users-layout {
     grid-template-columns: 1fr;
   }
 

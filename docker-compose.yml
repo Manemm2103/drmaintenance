@@ -32,6 +32,10 @@ services:
       DB_USER: ${DB_USER:-drmaintenance}
       DB_PASSWORD: ${DB_PASSWORD:-drmaintenance}
       DB_POOL_LIMIT: 10
+      ADMIN_USERNAME: "${ADMIN_USERNAME:-admin}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:-change_this_admin_password}"
+      ADMIN_DISPLAY_NAME: "${ADMIN_DISPLAY_NAME:-System Administrator}"
+      ADMIN_EMAIL: "${ADMIN_EMAIL:-admin@drmaintenance.local}"
     ports:
       - "${WEB_PORT:-3000}:3000"
 

@@ -4,13 +4,16 @@ const els = {
   planCount: document.querySelector("#planCount"),
   orderCount: document.querySelector("#orderCount"),
   overdueCount: document.querySelector("#overdueCount"),
+  userCount: document.querySelector("#userCount"),
   workOrderRows: document.querySelector("#workOrderRows"),
   assetList: document.querySelector("#assetList"),
   planList: document.querySelector("#planList"),
   activityList: document.querySelector("#activityList"),
+  userList: document.querySelector("#userList"),
   assetSelect: document.querySelector("#assetSelect"),
   refreshButton: document.querySelector("#refreshButton"),
   workOrderForm: document.querySelector("#workOrderForm"),
+  userForm: document.querySelector("#userForm"),
   toast: document.querySelector("#toast")
 };
 
@@ -26,6 +29,13 @@ const statusLabels = {
   planned: "Geplant",
   in_progress: "In Arbeit",
   done: "Erledigt"
+};
+
+const roleLabels = {
+  admin: "Admin",
+  manager: "Manager",
+  technician: "Techniker",
+  viewer: "Leser"
 };
 
 async function api(path, options = {}) {
@@ -69,17 +79,19 @@ function setConnectionStatus(ok) {
 }
 
 function renderSummary(payload) {
-  const { summary, workOrders, assets, plans, activity } = payload;
+  const { summary, workOrders, assets, plans, activity, users } = payload;
 
   els.assetCount.textContent = summary.assetCount;
   els.planCount.textContent = summary.activePlanCount;
   els.orderCount.textContent = summary.openWorkOrderCount;
   els.overdueCount.textContent = summary.overdueCount;
+  els.userCount.textContent = summary.activeUserCount;
 
   renderWorkOrders(workOrders);
   renderAssets(assets);
   renderPlans(plans);
   renderActivity(activity);
+  renderUsers(users);
   renderAssetOptions(assets);
 }
 
@@ -144,6 +156,33 @@ function renderActivity(activity) {
   `).join("");
 }
 
+function renderUsers(users) {
+  if (!users || users.length === 0) {
+    els.userList.innerHTML = '<div class="list-item">Keine Benutzer angelegt.</div>';
+    return;
+  }
+
+  els.userList.innerHTML = users.map((user) => `
+    <div class="user-item">
+      <div>
+        <strong>${escapeHtml(user.displayName)}</strong>
+        <div class="list-meta">
+          <span>@${escapeHtml(user.username)}</span>
+          <span>${escapeHtml(user.email || "Keine E-Mail")}</span>
+          <span>${roleLabels[user.role] || user.role}</span>
+          <span>${Number(user.active) === 1 ? "Aktiv" : "Inaktiv"}</span>
+        </div>
+      </div>
+      <div class="user-actions">
+        ${Number(user.isSystem) === 1
+          ? '<span class="system-note">Systemadmin</span>'
+          : `<button class="compact-button" type="button" title="Benutzer loeschen" aria-label="Benutzer loeschen" data-delete-user="${user.id}">X</button>`
+        }
+      </div>
+    </div>
+  `).join("");
+}
+
 function renderAssetOptions(assets) {
   const currentValue = els.assetSelect.value;
   els.assetSelect.innerHTML = '<option value="">Ohne Anlage</option>' + assets.map((asset) => (
@@ -181,6 +220,14 @@ async function completeWorkOrder(id) {
   await loadDashboard();
 }
 
+async function deleteUser(id) {
+  await api(`/api/users/${id}`, {
+    method: "DELETE"
+  });
+  showToast("Benutzer geloescht.");
+  await loadDashboard();
+}
+
 function bindEvents() {
   els.refreshButton.addEventListener("click", loadDashboard);
 
@@ -193,6 +240,11 @@ function bindEvents() {
     const completeButton = event.target.closest("[data-complete]");
     if (completeButton) {
       completeWorkOrder(completeButton.dataset.complete).catch((error) => showToast(error.message));
+    }
+
+    const deleteUserButton = event.target.closest("[data-delete-user]");
+    if (deleteUserButton) {
+      deleteUser(deleteUserButton.dataset.deleteUser).catch((error) => showToast(error.message));
     }
   });
 
@@ -213,6 +265,26 @@ function bindEvents() {
 
     els.workOrderForm.reset();
     showToast("Auftrag gespeichert.");
+    await loadDashboard();
+  });
+
+  els.userForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(els.userForm));
+
+    await api("/api/users", {
+      method: "POST",
+      body: JSON.stringify({
+        username: data.username,
+        displayName: data.displayName,
+        email: data.email,
+        role: data.role,
+        password: data.password
+      })
+    });
+
+    els.userForm.reset();
+    showToast("Benutzer angelegt.");
     await loadDashboard();
   });
 }

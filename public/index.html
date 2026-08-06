@@ -23,6 +23,7 @@
           <a href="#auftraege">Auftraege</a>
           <a href="#anlagen">Anlagen</a>
           <a href="#planung">Planung</a>
+          <a href="#benutzer">Benutzer</a>
         </nav>
 
         <div class="sidebar-status">
@@ -59,6 +60,10 @@
           <article class="metric-card urgent">
             <span>Ueberfaellig</span>
             <strong id="overdueCount">-</strong>
+          </article>
+          <article class="metric-card">
+            <span>Aktive Benutzer</span>
+            <strong id="userCount">-</strong>
           </article>
         </section>
 
@@ -149,6 +154,46 @@
               </div>
             </div>
             <div class="plan-list" id="planList"></div>
+          </article>
+
+          <article class="panel wide" id="benutzer">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Administration</p>
+                <h2>Benutzer</h2>
+              </div>
+            </div>
+            <div class="users-layout">
+              <form id="userForm" class="form-grid">
+                <label>
+                  Benutzername
+                  <input name="username" placeholder="z.B. max" autocomplete="username" required>
+                </label>
+                <label>
+                  Anzeigename
+                  <input name="displayName" placeholder="Max Mustermann" required>
+                </label>
+                <label>
+                  E-Mail
+                  <input name="email" type="email" placeholder="max@example.com">
+                </label>
+                <label>
+                  Rolle
+                  <select name="role">
+                    <option value="technician">Techniker</option>
+                    <option value="manager">Manager</option>
+                    <option value="viewer">Leser</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </label>
+                <label class="span-2">
+                  Initiales Passwort
+                  <input name="password" type="password" autocomplete="new-password" required>
+                </label>
+                <button class="primary-button span-2" type="submit">Benutzer anlegen</button>
+              </form>
+              <div class="user-list" id="userList"></div>
+            </div>
           </article>
 
           <article class="panel">

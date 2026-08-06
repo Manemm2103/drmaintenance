@@ -35,6 +35,25 @@ app.get("/api/summary", asyncRoute(async (_req, res) => {
   res.json(await db.getDashboardSummary());
 }));
 
+app.get("/api/users", asyncRoute(async (_req, res) => {
+  res.json(await db.listUsers());
+}));
+
+app.post("/api/users", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["username", "displayName", "password"]);
+  const user = await db.createUser(req.body);
+  res.status(201).json(user);
+}));
+
+app.patch("/api/users/:id", asyncRoute(async (req, res) => {
+  const user = await db.updateUser(Number(req.params.id), req.body);
+  res.json(user);
+}));
+
+app.delete("/api/users/:id", asyncRoute(async (req, res) => {
+  res.json(await db.deleteUser(Number(req.params.id)));
+}));
+
 app.get("/api/assets", asyncRoute(async (_req, res) => {
   res.json(await db.listAssets());
 }));

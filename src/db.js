@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const mysql = require("mysql2/promise");
 
 const databaseConfig = {
@@ -13,6 +14,7 @@ const databaseConfig = {
 
 const pool = mysql.createPool(databaseConfig);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+const allowedRoles = new Set(["admin", "manager", "technician", "viewer"]);
 
 async function waitForDatabase(maxAttempts = 45) {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -82,6 +84,27 @@ async function runMigrations() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      username VARCHAR(80) NOT NULL,
+      display_name VARCHAR(160) NOT NULL,
+      email VARCHAR(190) NULL,
+      role ENUM('admin', 'manager', 'technician', 'viewer') NOT NULL DEFAULT 'technician',
+      password_hash VARCHAR(160) NOT NULL,
+      password_salt VARCHAR(80) NOT NULL,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      is_system BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_users_username (username),
+      UNIQUE KEY uq_users_email (email),
+      INDEX idx_users_role (role),
+      INDEX idx_users_active (active),
+      INDEX idx_users_system (is_system)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS activity_log (
       id INT AUTO_INCREMENT PRIMARY KEY,
       entity_type VARCHAR(80) NOT NULL,
@@ -93,7 +116,57 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
+  await seedSystemAdmin();
   await seedInitialData();
+}
+
+function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
+  const hash = crypto
+    .pbkdf2Sync(password, salt, 120000, 64, "sha512")
+    .toString("hex");
+
+  return {
+    salt,
+    hash
+  };
+}
+
+function getInitialAdminConfig() {
+  return {
+    username: process.env.ADMIN_USERNAME || "admin",
+    password: process.env.ADMIN_PASSWORD || "change_this_admin_password",
+    displayName: process.env.ADMIN_DISPLAY_NAME || "System Administrator",
+    email: process.env.ADMIN_EMAIL || "admin@drmaintenance.local"
+  };
+}
+
+async function seedSystemAdmin() {
+  const [[existingAdmin]] = await pool.query("SELECT id FROM users WHERE is_system = TRUE LIMIT 1");
+  if (existingAdmin) {
+    return;
+  }
+
+  const admin = getInitialAdminConfig();
+  const credentials = hashPassword(admin.password);
+
+  const [result] = await pool.execute(
+    `
+      INSERT INTO users (username, display_name, email, role, password_hash, password_salt, active, is_system)
+      VALUES (?, ?, ?, 'admin', ?, ?, TRUE, TRUE)
+    `,
+    [
+      admin.username,
+      admin.displayName,
+      admin.email || null,
+      credentials.hash,
+      credentials.salt
+    ]
+  );
+
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('user', ?, ?)",
+    [result.insertId, `Systemadministrator "${admin.username}" angelegt.`]
+  );
 }
 
 async function seedInitialData() {
@@ -162,7 +235,8 @@ async function getDashboardSummary() {
       (SELECT COUNT(*) FROM assets) AS assetCount,
       (SELECT COUNT(*) FROM maintenance_plans WHERE active = TRUE) AS activePlanCount,
       (SELECT COUNT(*) FROM work_orders WHERE status <> 'done') AS openWorkOrderCount,
-      (SELECT COUNT(*) FROM work_orders WHERE status <> 'done' AND due_date < CURDATE()) AS overdueCount
+      (SELECT COUNT(*) FROM work_orders WHERE status <> 'done' AND due_date < CURDATE()) AS overdueCount,
+      (SELECT COUNT(*) FROM users WHERE active = TRUE) AS activeUserCount
   `);
 
   const [workOrders] = await pool.query(`
@@ -211,13 +285,206 @@ async function getDashboardSummary() {
     LIMIT 8
   `);
 
+  const users = await listUsers();
+
   return {
     summary,
     workOrders,
     plans,
     assets,
-    activity
+    activity,
+    users
   };
+}
+
+function createError(message, statusCode) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function assertValidRole(role) {
+  if (!allowedRoles.has(role)) {
+    throw createError("Ungueltige Benutzerrolle.", 400);
+  }
+}
+
+function normalizeUserInput(input) {
+  return {
+    username: input.username?.trim(),
+    displayName: input.displayName?.trim(),
+    email: input.email?.trim() || null,
+    role: input.role || "technician",
+    password: input.password
+  };
+}
+
+function handleDuplicateUser(error) {
+  if (error.code === "ER_DUP_ENTRY") {
+    throw createError("Benutzername oder E-Mail ist bereits vergeben.", 409);
+  }
+
+  throw error;
+}
+
+async function listUsers() {
+  const [rows] = await pool.query(`
+    SELECT
+      id,
+      username,
+      display_name AS displayName,
+      email,
+      role,
+      active,
+      is_system AS isSystem,
+      created_at AS createdAt
+    FROM users
+    ORDER BY is_system DESC, username ASC
+  `);
+  return rows;
+}
+
+async function createUser(input) {
+  const user = normalizeUserInput(input);
+  assertValidRole(user.role);
+
+  if (!user.username || !user.displayName || !user.password) {
+    throw createError("Benutzername, Anzeigename und Passwort sind Pflichtfelder.", 400);
+  }
+
+  const credentials = hashPassword(user.password);
+
+  try {
+    const [result] = await pool.execute(
+      `
+        INSERT INTO users (username, display_name, email, role, password_hash, password_salt)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `,
+      [
+        user.username,
+        user.displayName,
+        user.email,
+        user.role,
+        credentials.hash,
+        credentials.salt
+      ]
+    );
+
+    await pool.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('user', ?, ?)",
+      [result.insertId, `Benutzer "${user.username}" angelegt.`]
+    );
+
+    return getUserById(result.insertId);
+  } catch (error) {
+    handleDuplicateUser(error);
+  }
+}
+
+async function getUserById(id) {
+  const [[row]] = await pool.execute(
+    `
+      SELECT
+        id,
+        username,
+        display_name AS displayName,
+        email,
+        role,
+        active,
+        is_system AS isSystem,
+        created_at AS createdAt
+      FROM users
+      WHERE id = ?
+    `,
+    [id]
+  );
+  return row;
+}
+
+async function updateUser(id, input) {
+  const existingUser = await getUserById(id);
+  if (!existingUser) {
+    throw createError("Benutzer nicht gefunden.", 404);
+  }
+
+  if (existingUser.isSystem) {
+    throw createError("Der initiale Adminbenutzer kann nicht veraendert werden.", 403);
+  }
+
+  const updates = [];
+  const params = [];
+
+  if (input.displayName !== undefined) {
+    updates.push("display_name = ?");
+    params.push(input.displayName.trim());
+  }
+
+  if (input.email !== undefined) {
+    updates.push("email = ?");
+    params.push(input.email.trim() || null);
+  }
+
+  if (input.role !== undefined) {
+    assertValidRole(input.role);
+    updates.push("role = ?");
+    params.push(input.role);
+  }
+
+  if (input.active !== undefined) {
+    updates.push("active = ?");
+    params.push(Boolean(input.active));
+  }
+
+  if (input.password) {
+    const credentials = hashPassword(input.password);
+    updates.push("password_hash = ?", "password_salt = ?");
+    params.push(credentials.hash, credentials.salt);
+  }
+
+  if (updates.length === 0) {
+    return existingUser;
+  }
+
+  params.push(id);
+
+  try {
+    await pool.execute(
+      `
+        UPDATE users
+        SET ${updates.join(", ")}
+        WHERE id = ?
+      `,
+      params
+    );
+
+    await pool.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('user', ?, ?)",
+      [id, `Benutzer "${existingUser.username}" aktualisiert.`]
+    );
+
+    return getUserById(id);
+  } catch (error) {
+    handleDuplicateUser(error);
+  }
+}
+
+async function deleteUser(id) {
+  const existingUser = await getUserById(id);
+  if (!existingUser) {
+    throw createError("Benutzer nicht gefunden.", 404);
+  }
+
+  if (existingUser.isSystem) {
+    throw createError("Der initiale Adminbenutzer kann nicht geloescht werden.", 403);
+  }
+
+  await pool.execute("DELETE FROM users WHERE id = ?", [id]);
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('user', ?, ?)",
+    [id, `Benutzer "${existingUser.username}" geloescht.`]
+  );
+
+  return { deleted: true };
 }
 
 async function listAssets() {
@@ -357,6 +624,10 @@ module.exports = {
   waitForDatabase,
   runMigrations,
   getDashboardSummary,
+  listUsers,
+  createUser,
+  updateUser,
+  deleteUser,
   listAssets,
   createAsset,
   listWorkOrders,

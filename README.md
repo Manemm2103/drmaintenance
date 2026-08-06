@@ -20,11 +20,17 @@ In Portainer am besten einen Stack aus dem Git-Repository anlegen:
 - Environment:
   - `WEB_PORT=3000`
   - `DB_NAME=drmaintenance`
-  - `DB_USER=drmaintenance`
-  - `DB_PASSWORD=<sicheres-passwort>`
-  - `DB_ROOT_PASSWORD=<sicheres-root-passwort>`
+- `DB_USER=drmaintenance`
+- `DB_PASSWORD=<sicheres-passwort>`
+- `DB_ROOT_PASSWORD=<sicheres-root-passwort>`
+- `ADMIN_USERNAME=admin`
+- `ADMIN_PASSWORD=<sicheres-admin-passwort>`
+- `ADMIN_DISPLAY_NAME=System Administrator`
+- `ADMIN_EMAIL=admin@drmaintenance.local`
 
 Die Web-App ist danach ueber `http://<server-ip>:3000` erreichbar.
+
+Der initiale Adminbenutzer wird beim ersten Start aus den `ADMIN_*` Variablen angelegt. Er ist ein Systembenutzer und kann in der App nicht veraendert oder geloescht werden. Wenn du die `ADMIN_*` Werte spaeter aenderst, wird ein bereits vorhandener Systemadmin nicht ueberschrieben.
 
 ## Container
 
@@ -37,6 +43,10 @@ Die Web-App ist danach ueber `http://<server-ip>:3000` erreichbar.
 - `GET /api/summary`
 - `GET /api/assets`
 - `POST /api/assets`
+- `GET /api/users`
+- `POST /api/users`
+- `PATCH /api/users/:id`
+- `DELETE /api/users/:id`
 - `GET /api/work-orders`
 - `POST /api/work-orders`
 - `PATCH /api/work-orders/:id/status`
