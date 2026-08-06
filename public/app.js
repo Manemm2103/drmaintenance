@@ -65,7 +65,7 @@ function showToast(message) {
 
 function setConnectionStatus(ok) {
   els.connectionStatus.textContent = ok ? "Datenbank verbunden" : "Keine Verbindung";
-  document.querySelector(".status-dot").style.background = ok ? "#f7f7f7" : "#777777";
+  document.querySelector(".status-dot").style.background = ok ? "#050505" : "#777777";
 }
 
 function renderSummary(payload) {
