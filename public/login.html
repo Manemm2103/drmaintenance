@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DR Maintenance Login</title>
+    <meta name="description" content="Anmeldung fuer DR Maintenance">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body class="login-page">
+    <main class="login-shell">
+      <section class="login-panel" aria-labelledby="loginTitle">
+        <img src="/logo.png" alt="DR HOME Logo" class="login-logo">
+        <p class="eyebrow">Geschuetzter Bereich</p>
+        <h1 id="loginTitle">DR Maintenance</h1>
+        <p class="login-copy">Bitte melde dich mit einem angelegten Benutzer an.</p>
+
+        <form class="login-form" id="loginForm">
+          <label>
+            Benutzername
+            <input name="username" autocomplete="username" required autofocus>
+          </label>
+          <label>
+            Passwort
+            <input name="password" type="password" autocomplete="current-password" required>
+          </label>
+          <label class="check-row">
+            <input name="remember" type="checkbox">
+            <span>Angemeldet bleiben</span>
+          </label>
+          <button class="primary-button" type="submit">Einloggen</button>
+          <div class="login-error" id="loginError" role="status" aria-live="polite"></div>
+        </form>
+
+        <div class="app-version login-version" id="loginVersion">Version wird geladen...</div>
+      </section>
+    </main>
+    <script src="/login.js"></script>
+  </body>
+</html>

@@ -15,6 +15,8 @@ const databaseConfig = {
 const pool = mysql.createPool(databaseConfig);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const allowedRoles = new Set(["admin", "manager", "technician", "viewer"]);
+const regularSessionMs = 12 * 60 * 60 * 1000;
+const rememberSessionMs = 60 * 24 * 60 * 60 * 1000;
 
 async function waitForDatabase(maxAttempts = 45) {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -145,6 +147,22 @@ async function runMigrations() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_sessions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      user_id INT NOT NULL,
+      session_hash CHAR(64) NOT NULL,
+      remember_me BOOLEAN NOT NULL DEFAULT FALSE,
+      expires_at DATETIME NOT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+      UNIQUE KEY uq_sessions_hash (session_hash),
+      INDEX idx_sessions_user (user_id),
+      INDEX idx_sessions_expires (expires_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS activity_log (
       id INT AUTO_INCREMENT PRIMARY KEY,
       entity_type VARCHAR(80) NOT NULL,
@@ -157,6 +175,7 @@ async function runMigrations() {
   `);
 
   await seedSystemAdmin();
+  await cleanupExpiredSessions();
   await seedPropertyData();
   await seedInitialData();
 }
@@ -169,6 +188,34 @@ function hashPassword(password, salt = crypto.randomBytes(16).toString("hex")) {
   return {
     salt,
     hash
+  };
+}
+
+function verifyPassword(password, storedHash, salt) {
+  const candidateHash = hashPassword(password, salt).hash;
+  const candidateBuffer = Buffer.from(candidateHash, "hex");
+  const storedBuffer = Buffer.from(storedHash, "hex");
+
+  return candidateBuffer.length === storedBuffer.length && crypto.timingSafeEqual(candidateBuffer, storedBuffer);
+}
+
+function hashSessionToken(token) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+
+function toPublicUser(row) {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    username: row.username,
+    displayName: row.displayName,
+    email: row.email,
+    role: row.role,
+    active: Boolean(row.active),
+    isSystem: Boolean(row.isSystem)
   };
 }
 
@@ -430,6 +477,101 @@ function handleDuplicateUser(error) {
   }
 
   throw error;
+}
+
+async function authenticateUser(username, password) {
+  const [[row]] = await pool.execute(
+    `
+      SELECT
+        id,
+        username,
+        display_name AS displayName,
+        email,
+        role,
+        active,
+        is_system AS isSystem,
+        password_hash AS passwordHash,
+        password_salt AS passwordSalt
+      FROM users
+      WHERE username = ?
+      LIMIT 1
+    `,
+    [username?.trim()]
+  );
+
+  if (!row || !row.active || !verifyPassword(password || "", row.passwordHash, row.passwordSalt)) {
+    return null;
+  }
+
+  return toPublicUser(row);
+}
+
+async function createSession(userId, rememberMe) {
+  const token = crypto.randomBytes(32).toString("hex");
+  const sessionHash = hashSessionToken(token);
+  const maxAgeMs = rememberMe ? rememberSessionMs : regularSessionMs;
+  const expiresAt = new Date(Date.now() + maxAgeMs);
+
+  await cleanupExpiredSessions();
+  await pool.execute(
+    `
+      INSERT INTO user_sessions (user_id, session_hash, remember_me, expires_at)
+      VALUES (?, ?, ?, ?)
+    `,
+    [userId, sessionHash, Boolean(rememberMe), expiresAt]
+  );
+
+  return {
+    token,
+    expiresAt,
+    maxAgeSeconds: rememberMe ? Math.floor(maxAgeMs / 1000) : null
+  };
+}
+
+async function getUserBySessionToken(token) {
+  if (!token) {
+    return null;
+  }
+
+  const sessionHash = hashSessionToken(token);
+  const [[row]] = await pool.execute(
+    `
+      SELECT
+        u.id,
+        u.username,
+        u.display_name AS displayName,
+        u.email,
+        u.role,
+        u.active,
+        u.is_system AS isSystem
+      FROM user_sessions s
+      INNER JOIN users u ON u.id = s.user_id
+      WHERE s.session_hash = ?
+        AND s.expires_at > NOW()
+        AND u.active = TRUE
+      LIMIT 1
+    `,
+    [sessionHash]
+  );
+
+  if (!row) {
+    return null;
+  }
+
+  await pool.execute("UPDATE user_sessions SET last_seen_at = CURRENT_TIMESTAMP WHERE session_hash = ?", [sessionHash]);
+  return toPublicUser(row);
+}
+
+async function deleteSession(token) {
+  if (!token) {
+    return;
+  }
+
+  await pool.execute("DELETE FROM user_sessions WHERE session_hash = ?", [hashSessionToken(token)]);
+}
+
+async function cleanupExpiredSessions() {
+  await pool.execute("DELETE FROM user_sessions WHERE expires_at <= NOW()");
 }
 
 async function listUsers() {
@@ -1072,6 +1214,10 @@ module.exports = {
   waitForDatabase,
   runMigrations,
   getDashboardSummary,
+  authenticateUser,
+  createSession,
+  getUserBySessionToken,
+  deleteSession,
   listUsers,
   createUser,
   updateUser,

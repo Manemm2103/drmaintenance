@@ -1,6 +1,8 @@
 const els = {
   connectionStatus: document.querySelector("#connectionStatus"),
   appVersion: document.querySelector("#appVersion"),
+  currentUser: document.querySelector("#currentUser"),
+  logoutButton: document.querySelector("#logoutButton"),
   assetCount: document.querySelector("#assetCount"),
   planCount: document.querySelector("#planCount"),
   orderCount: document.querySelector("#orderCount"),
@@ -68,6 +70,11 @@ async function api(path, options = {}) {
     ...options
   });
 
+  if (response.status === 401) {
+    window.location.href = "/login";
+    throw new Error("Bitte anmelden.");
+  }
+
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}));
     throw new Error(payload.error || "Anfrage fehlgeschlagen");
@@ -131,6 +138,16 @@ async function loadAppVersion() {
   } catch (_error) {
     els.appVersion.textContent = "Version unbekannt";
   }
+}
+
+async function loadCurrentUser() {
+  const payload = await api("/api/auth/me");
+  if (!payload.authenticated) {
+    window.location.href = "/login";
+    return;
+  }
+
+  els.currentUser.textContent = `${payload.user.displayName} · ${roleLabels[payload.user.role] || payload.user.role}`;
 }
 
 function renderSummary(payload) {
@@ -397,6 +414,14 @@ async function deleteUser(id) {
   await loadDashboard();
 }
 
+async function logout() {
+  await api("/api/auth/logout", {
+    method: "POST",
+    body: JSON.stringify({})
+  });
+  window.location.href = "/login";
+}
+
 function setMaintenanceDate(dateKey) {
   els.maintenanceDueDate.value = dateKey;
   document.querySelector("#new-maintenance").scrollIntoView({ behavior: "smooth" });
@@ -413,6 +438,9 @@ function parseTargetValue(value) {
 
 function bindEvents() {
   els.refreshButton.addEventListener("click", loadDashboard);
+  els.logoutButton.addEventListener("click", () => {
+    logout().catch((error) => showToast(error.message));
+  });
 
   els.prevMonthButton.addEventListener("click", () => {
     visibleMonth = addMonths(visibleMonth, -1);
@@ -547,4 +575,7 @@ function bindEvents() {
 
 bindEvents();
 loadAppVersion();
+loadCurrentUser().catch(() => {
+  window.location.href = "/login";
+});
 loadDashboard();

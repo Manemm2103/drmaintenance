@@ -5,10 +5,11 @@ const { APP_VERSION } = require("./version");
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
+const publicDir = path.join(__dirname, "..", "public");
+const sessionCookieName = "drmaintenance_session";
 
 app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));
-app.use(express.static(path.join(__dirname, "..", "public")));
 
 const asyncRoute = (handler) => (req, res, next) => {
   Promise.resolve(handler(req, res, next)).catch(next);
@@ -22,6 +23,138 @@ function requireFields(body, fields) {
     throw error;
   }
 }
+
+function createError(message, statusCode) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function parseCookies(req) {
+  const header = req.headers.cookie || "";
+  return header.split(";").reduce((cookies, part) => {
+    const [name, ...valueParts] = part.trim().split("=");
+    if (!name) {
+      return cookies;
+    }
+
+    try {
+      cookies[name] = decodeURIComponent(valueParts.join("="));
+    } catch (_error) {
+      cookies[name] = valueParts.join("=");
+    }
+    return cookies;
+  }, {});
+}
+
+function getSessionToken(req) {
+  return parseCookies(req)[sessionCookieName];
+}
+
+function shouldUseSecureCookie() {
+  return process.env.COOKIE_SECURE === "true";
+}
+
+function buildSessionCookie(token, maxAgeSeconds) {
+  const parts = [
+    `${sessionCookieName}=${encodeURIComponent(token)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax"
+  ];
+
+  if (maxAgeSeconds) {
+    parts.push(`Max-Age=${maxAgeSeconds}`);
+  }
+
+  if (shouldUseSecureCookie()) {
+    parts.push("Secure");
+  }
+
+  return parts.join("; ");
+}
+
+function buildClearSessionCookie() {
+  const parts = [
+    `${sessionCookieName}=`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    "Max-Age=0"
+  ];
+
+  if (shouldUseSecureCookie()) {
+    parts.push("Secure");
+  }
+
+  return parts.join("; ");
+}
+
+async function getCurrentUser(req) {
+  return db.getUserBySessionToken(getSessionToken(req));
+}
+
+async function requireAuth(req, res, next) {
+  const user = await getCurrentUser(req);
+  if (!user) {
+    if (req.originalUrl.startsWith("/api/")) {
+      res.status(401).json({ error: "Bitte anmelden." });
+      return;
+    }
+
+    res.redirect("/login");
+    return;
+  }
+
+  req.user = user;
+  next();
+}
+
+app.get("/styles.css", (_req, res) => {
+  res.sendFile(path.join(publicDir, "styles.css"));
+});
+
+app.get("/logo.png", (_req, res) => {
+  res.sendFile(path.join(publicDir, "logo.png"));
+});
+
+app.get("/login.js", (_req, res) => {
+  res.sendFile(path.join(publicDir, "login.js"));
+});
+
+app.get("/login", asyncRoute(async (req, res) => {
+  const user = await getCurrentUser(req);
+  if (user) {
+    res.redirect("/");
+    return;
+  }
+
+  res.sendFile(path.join(publicDir, "login.html"));
+}));
+
+app.get("/login.html", asyncRoute(async (req, res) => {
+  const user = await getCurrentUser(req);
+  if (user) {
+    res.redirect("/");
+    return;
+  }
+
+  res.sendFile(path.join(publicDir, "login.html"));
+}));
+
+app.get(["/", "/index.html"], asyncRoute(async (req, res) => {
+  const user = await getCurrentUser(req);
+  if (!user) {
+    res.redirect("/login");
+    return;
+  }
+
+  res.sendFile(path.join(publicDir, "index.html"));
+}));
+
+app.get("/app.js", asyncRoute(requireAuth), (_req, res) => {
+  res.sendFile(path.join(publicDir, "app.js"));
+});
 
 app.get("/api/health", asyncRoute(async (_req, res) => {
   await db.pool.query("SELECT 1");
@@ -38,6 +171,38 @@ app.get("/api/version", (_req, res) => {
     version: APP_VERSION
   });
 });
+
+app.post("/api/auth/login", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["username", "password"]);
+
+  const user = await db.authenticateUser(req.body.username, req.body.password);
+  if (!user) {
+    throw createError("Benutzername oder Passwort ist falsch.", 401);
+  }
+
+  const session = await db.createSession(user.id, Boolean(req.body.remember));
+  res.setHeader("Set-Cookie", buildSessionCookie(session.token, session.maxAgeSeconds));
+  res.json({
+    authenticated: true,
+    user
+  });
+}));
+
+app.post("/api/auth/logout", asyncRoute(async (req, res) => {
+  await db.deleteSession(getSessionToken(req));
+  res.setHeader("Set-Cookie", buildClearSessionCookie());
+  res.json({ loggedOut: true });
+}));
+
+app.get("/api/auth/me", asyncRoute(async (req, res) => {
+  const user = await getCurrentUser(req);
+  res.json({
+    authenticated: Boolean(user),
+    user
+  });
+}));
+
+app.use("/api", asyncRoute(requireAuth));
 
 app.get("/api/summary", asyncRoute(async (_req, res) => {
   res.json(await db.getDashboardSummary());

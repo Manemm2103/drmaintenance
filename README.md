@@ -27,10 +27,13 @@ In Portainer am besten einen Stack aus dem Git-Repository anlegen:
 - `ADMIN_PASSWORD=<sicheres-admin-passwort>`
 - `ADMIN_DISPLAY_NAME=System Administrator`
 - `ADMIN_EMAIL=admin@drmaintenance.local`
+- `COOKIE_SECURE=false`
 
 Die Web-App ist danach ueber `http://<server-ip>:3000` erreichbar.
 
 Der initiale Adminbenutzer wird beim ersten Start aus den `ADMIN_*` Variablen angelegt. Er ist ein Systembenutzer und kann in der App nicht veraendert oder geloescht werden. Wenn du die `ADMIN_*` Werte spaeter aenderst, wird ein bereits vorhandener Systemadmin nicht ueberschrieben.
+
+Ohne Login wird nur die Anmeldeseite ausgeliefert. Mit dem Haken `Angemeldet bleiben` setzt die App ein HTTP-only Cookie fuer 60 Tage. Ohne Haken ist es eine normale Browser-Session mit serverseitigem Ablauf.
 
 ## Container
 
@@ -41,6 +44,9 @@ Der initiale Adminbenutzer wird beim ersten Start aus den `ADMIN_*` Variablen an
 
 - `GET /api/health`
 - `GET /api/version`
+- `POST /api/auth/login`
+- `POST /api/auth/logout`
+- `GET /api/auth/me`
 - `GET /api/summary`
 - `GET /api/calendar`
 - `GET /api/properties`
