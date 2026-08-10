@@ -227,6 +227,25 @@ app.delete("/api/users/:id", asyncRoute(async (req, res) => {
   res.json(await db.deleteUser(Number(req.params.id)));
 }));
 
+app.get("/api/customers", asyncRoute(async (_req, res) => {
+  res.json(await db.listCustomers());
+}));
+
+app.post("/api/customers", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["name"]);
+  const customer = await db.createCustomer(req.body);
+  res.status(201).json(customer);
+}));
+
+app.patch("/api/customers/:id", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["name"]);
+  res.json(await db.updateCustomer(Number(req.params.id), req.body));
+}));
+
+app.delete("/api/customers/:id", asyncRoute(async (req, res) => {
+  res.json(await db.deleteCustomer(Number(req.params.id)));
+}));
+
 app.get("/api/properties", asyncRoute(async (_req, res) => {
   res.json(await db.listProperties());
 }));

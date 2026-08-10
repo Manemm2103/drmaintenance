@@ -35,6 +35,10 @@ Der initiale Adminbenutzer wird beim ersten Start aus den `ADMIN_*` Variablen an
 
 Ohne Login wird nur die Anmeldeseite ausgeliefert. Mit dem Haken `Angemeldet bleiben` setzt die App ein HTTP-only Cookie für 60 Tage. Ohne Haken ist es eine normale Browser-Session mit serverseitigem Ablauf.
 
+## Stammdaten-Workflow
+
+Der Workflow startet bei einem Kunden. Beim Anlegen vergibt DR Maintenance automatisch die nächste Kundennummer im Format `C0000154`, `C0000155` usw.; die Nummer kann in den Stammdaten geändert werden. Danach werden Gebäude und Appartments einem Kunden zugewiesen. Wartungsobjekte wie Klimaanlage oder Dampfbad hängen anschließend an einem Gebäude oder Appartment. Wartungspläne werden auf Basis dieser Wartungsobjekte angelegt.
+
 ## Container
 
 - `web`: Node.js/Express-App mit statischem Frontend und JSON API
@@ -49,6 +53,10 @@ Ohne Login wird nur die Anmeldeseite ausgeliefert. Mit dem Haken `Angemeldet ble
 - `GET /api/auth/me`
 - `GET /api/summary`
 - `GET /api/calendar`
+- `GET /api/customers`
+- `POST /api/customers`
+- `PATCH /api/customers/:id`
+- `DELETE /api/customers/:id`
 - `GET /api/properties`
 - `POST /api/buildings`
 - `PATCH /api/buildings/:id`
@@ -73,7 +81,7 @@ Ohne Login wird nur die Anmeldeseite ausgeliefert. Mit dem Haken `Angemeldet ble
 
 ## Versionierung
 
-Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.06.14`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
+Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.10.01`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
 
 ## Nächste sinnvolle Schritte
 

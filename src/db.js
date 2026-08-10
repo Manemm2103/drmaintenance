@@ -35,8 +35,27 @@ async function waitForDatabase(maxAttempts = 45) {
 
 async function runMigrations() {
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS customers (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      customer_number VARCHAR(24) NOT NULL,
+      name VARCHAR(180) NOT NULL,
+      contact_name VARCHAR(160) NULL,
+      email VARCHAR(190) NULL,
+      phone VARCHAR(80) NULL,
+      billing_address VARCHAR(240) NULL,
+      notes TEXT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_customers_number (customer_number),
+      INDEX idx_customers_name (name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS assets (
       id INT AUTO_INCREMENT PRIMARY KEY,
+      building_id INT NULL,
+      apartment_id INT NULL,
       name VARCHAR(160) NOT NULL,
       asset_type VARCHAR(120) NOT NULL,
       location VARCHAR(160) NOT NULL,
@@ -44,6 +63,8 @@ async function runMigrations() {
       criticality ENUM('low', 'medium', 'high', 'critical') NOT NULL DEFAULT 'medium',
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_assets_building (building_id),
+      INDEX idx_assets_apartment (apartment_id),
       INDEX idx_assets_location (location),
       INDEX idx_assets_criticality (criticality)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -52,12 +73,14 @@ async function runMigrations() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS buildings (
       id INT AUTO_INCREMENT PRIMARY KEY,
+      customer_id INT NULL,
       name VARCHAR(180) NOT NULL,
       address VARCHAR(220) NULL,
       building_type ENUM('private_house', 'multi_family', 'commercial', 'other') NOT NULL DEFAULT 'private_house',
       notes TEXT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_buildings_customer (customer_id),
       INDEX idx_buildings_name (name),
       INDEX idx_buildings_type (building_type)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -67,6 +90,7 @@ async function runMigrations() {
     CREATE TABLE IF NOT EXISTS apartments (
       id INT AUTO_INCREMENT PRIMARY KEY,
       building_id INT NOT NULL,
+      customer_id INT NULL,
       apartment_number VARCHAR(80) NOT NULL,
       name VARCHAR(160) NOT NULL,
       floor VARCHAR(80) NULL,
@@ -75,10 +99,20 @@ async function runMigrations() {
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       CONSTRAINT fk_apartments_building FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE CASCADE,
       UNIQUE KEY uq_apartment_per_building (building_id, apartment_number),
+      INDEX idx_apartments_customer (customer_id),
       INDEX idx_apartments_building (building_id),
       INDEX idx_apartments_name (name)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+
+  await pool.query("ALTER TABLE buildings ADD COLUMN IF NOT EXISTS customer_id INT NULL AFTER id");
+  await pool.query("ALTER TABLE buildings ADD INDEX IF NOT EXISTS idx_buildings_customer (customer_id)");
+  await pool.query("ALTER TABLE apartments ADD COLUMN IF NOT EXISTS customer_id INT NULL AFTER building_id");
+  await pool.query("ALTER TABLE apartments ADD INDEX IF NOT EXISTS idx_apartments_customer (customer_id)");
+  await pool.query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS building_id INT NULL AFTER id");
+  await pool.query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS apartment_id INT NULL AFTER building_id");
+  await pool.query("ALTER TABLE assets ADD INDEX IF NOT EXISTS idx_assets_building (building_id)");
+  await pool.query("ALTER TABLE assets ADD INDEX IF NOT EXISTS idx_assets_apartment (apartment_id)");
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS maintenance_plans (
@@ -264,30 +298,43 @@ async function seedInitialData() {
     return;
   }
 
+  const [[privateHouse]] = await pool.query("SELECT id FROM buildings WHERE building_type = 'private_house' ORDER BY id ASC LIMIT 1");
+  const [[firstApartment]] = await pool.query("SELECT id FROM apartments ORDER BY id ASC LIMIT 1");
+
   const [assetResult] = await pool.query(
     `
-      INSERT INTO assets (name, asset_type, location, serial_number, criticality)
+      INSERT INTO assets (building_id, apartment_id, name, asset_type, location, serial_number, criticality)
       VALUES
-        ('Klimaanlage Wellnessbereich', 'Klima', 'Wellnessbereich', 'KLIMA-001', 'high'),
-        ('Dampfbad Steuerung', 'Wellness', 'Spa-Bereich', 'DAMPF-001', 'critical'),
-        ('PV Wechselrichter 1', 'Energie', 'Dachzentrale', 'PV-WR-001', 'medium'),
-        ('Wasserenthärter', 'Sanitär', 'Technikraum UG', 'SAN-WE-004', 'medium')
-    `
+        (?, NULL, 'Klimaanlage Wellnessbereich', 'Klima', 'Wellnessbereich', 'KLIMA-001', 'high'),
+        (NULL, ?, 'Dampfbad Steuerung', 'Wellness', 'Spa-Bereich', 'DAMPF-001', 'critical'),
+        (?, NULL, 'PV Wechselrichter 1', 'Energie', 'Dachzentrale', 'PV-WR-001', 'medium'),
+        (?, NULL, 'Wasserenthärter', 'Sanitär', 'Technikraum UG', 'SAN-WE-004', 'medium')
+    `,
+    [
+      privateHouse?.id || null,
+      firstApartment?.id || null,
+      privateHouse?.id || null,
+      privateHouse?.id || null
+    ]
   );
 
   await pool.query(
     `
-      INSERT INTO maintenance_plans (asset_id, title, interval_days, last_done_on, next_due_on)
+      INSERT INTO maintenance_plans (asset_id, target_type, target_id, title, interval_days, last_done_on, next_due_on)
       VALUES
-        (?, 'Filter und Kondensatablauf prüfen', 90, CURDATE() - INTERVAL 70 DAY, CURDATE() + INTERVAL 20 DAY),
-        (?, 'Dampfgenerator und Türdichtung prüfen', 180, CURDATE() - INTERVAL 150 DAY, CURDATE() + INTERVAL 30 DAY),
-        (?, 'Ertragsdaten und Lüfter prüfen', 60, CURDATE() - INTERVAL 65 DAY, CURDATE() - INTERVAL 5 DAY),
-        (?, 'Salzstand und Harzspülung prüfen', 45, CURDATE() - INTERVAL 35 DAY, CURDATE() + INTERVAL 10 DAY)
+        (?, 'asset', ?, 'Filter und Kondensatablauf prüfen', 90, CURDATE() - INTERVAL 70 DAY, CURDATE() + INTERVAL 20 DAY),
+        (?, 'asset', ?, 'Dampfgenerator und Türdichtung prüfen', 180, CURDATE() - INTERVAL 150 DAY, CURDATE() + INTERVAL 30 DAY),
+        (?, 'asset', ?, 'Ertragsdaten und Lüfter prüfen', 60, CURDATE() - INTERVAL 65 DAY, CURDATE() - INTERVAL 5 DAY),
+        (?, 'asset', ?, 'Salzstand und Harzspülung prüfen', 45, CURDATE() - INTERVAL 35 DAY, CURDATE() + INTERVAL 10 DAY)
     `,
     [
       assetResult.insertId,
+      assetResult.insertId,
+      assetResult.insertId + 1,
       assetResult.insertId + 1,
       assetResult.insertId + 2,
+      assetResult.insertId + 2,
+      assetResult.insertId + 3,
       assetResult.insertId + 3
     ]
   );
@@ -325,19 +372,28 @@ async function seedPropertyData() {
     return;
   }
 
+  const [customerResult] = await pool.query(
+    `
+      INSERT INTO customers (customer_number, name, contact_name, email, phone, billing_address, notes)
+      VALUES
+        ('C0000154', 'DR Home Musterkunde', 'Max Mustermann', 'kunde@example.com', '+49 000 000000', 'Musterstraße 12', 'Beispielkunde für den neuen Kundenworkflow.')
+    `
+  );
+
   const [buildingResult] = await pool.query(
     `
-      INSERT INTO buildings (name, address, building_type, notes)
+      INSERT INTO buildings (customer_id, name, address, building_type, notes)
       VALUES
-        ('DR Home Privathaus', 'Musterstraße 12', 'private_house', 'Einzelobjekt ohne Appartments.'),
-        ('Wohnhaus Gartenblick', 'Gartenweg 8', 'multi_family', 'Mehrparteienhaus mit Appartments.')
-    `
+        (?, 'DR Home Privathaus', 'Musterstraße 12', 'private_house', 'Einzelobjekt ohne Appartments.'),
+        (?, 'Wohnhaus Gartenblick', 'Gartenweg 8', 'multi_family', 'Mehrparteienhaus mit Appartments.')
+    `,
+    [customerResult.insertId, customerResult.insertId]
   );
 
   const privateHouseId = buildingResult.insertId;
   const multiFamilyId = buildingResult.insertId + 1;
 
-  const [apartmentResult] = await pool.execute(
+  await pool.execute(
     `
       INSERT INTO apartments (building_id, apartment_number, name, floor)
       VALUES
@@ -345,16 +401,6 @@ async function seedPropertyData() {
         (?, 'OG-02', 'Appartment OG rechts', 'OG')
     `,
     [multiFamilyId, multiFamilyId]
-  );
-
-  await pool.execute(
-    `
-      INSERT INTO maintenance_plans (asset_id, target_type, target_id, title, interval_days, last_done_on, next_due_on)
-      VALUES
-        (NULL, 'building', ?, 'Dachrinne und Außenbereich prüfen', 180, CURDATE() - INTERVAL 120 DAY, CURDATE() + INTERVAL 60 DAY),
-        (NULL, 'apartment', ?, 'Rauchmelder und Fenster prüfen', 365, CURDATE() - INTERVAL 330 DAY, CURDATE() + INTERVAL 35 DAY)
-    `,
-    [privateHouseId, apartmentResult.insertId]
   );
 
   await pool.execute(
@@ -390,6 +436,11 @@ async function normalizeGermanText() {
   ];
 
   const columns = [
+    ["customers", "customer_number"],
+    ["customers", "name"],
+    ["customers", "contact_name"],
+    ["customers", "billing_address"],
+    ["customers", "notes"],
     ["assets", "name"],
     ["assets", "asset_type"],
     ["assets", "location"],
@@ -422,6 +473,7 @@ async function getDashboardSummary() {
       (SELECT COUNT(*) FROM maintenance_plans WHERE active = TRUE) AS activePlanCount,
       (SELECT COUNT(*) FROM work_orders WHERE status <> 'done') AS openWorkOrderCount,
       (SELECT COUNT(*) FROM work_orders WHERE status <> 'done' AND due_date < CURDATE()) AS overdueCount,
+      (SELECT COUNT(*) FROM customers) AS customerCount,
       (SELECT COUNT(*) FROM users WHERE active = TRUE) AS activeUserCount
   `);
 
@@ -477,9 +529,36 @@ async function getDashboardSummary() {
   `);
 
   const [assets] = await pool.query(`
-    SELECT id, name, asset_type AS assetType, location, serial_number AS serialNumber, criticality
-    FROM assets
-    ORDER BY FIELD(criticality, 'critical', 'high', 'medium', 'low') ASC, name ASC
+    SELECT
+      a.id,
+      a.building_id AS buildingId,
+      a.apartment_id AS apartmentId,
+      CASE
+        WHEN a.apartment_id IS NOT NULL THEN 'apartment'
+        WHEN a.building_id IS NOT NULL THEN 'building'
+        ELSE NULL
+      END AS assignmentType,
+      COALESCE(a.apartment_id, a.building_id) AS assignmentId,
+      CASE
+        WHEN a.apartment_id IS NOT NULL THEN CONCAT(apartment_building.name, ' / ', asset_apartment.name)
+        WHEN a.building_id IS NOT NULL THEN asset_building.name
+        ELSE NULL
+      END AS assignmentLabel,
+      COALESCE(apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number) AS customerNumber,
+      COALESCE(apartment_customer.name, inherited_customer.name, building_customer.name) AS customerName,
+      a.name,
+      a.asset_type AS assetType,
+      a.location,
+      a.serial_number AS serialNumber,
+      a.criticality
+    FROM assets a
+    LEFT JOIN buildings asset_building ON asset_building.id = a.building_id
+    LEFT JOIN apartments asset_apartment ON asset_apartment.id = a.apartment_id
+    LEFT JOIN buildings apartment_building ON apartment_building.id = asset_apartment.building_id
+    LEFT JOIN customers building_customer ON building_customer.id = asset_building.customer_id
+    LEFT JOIN customers apartment_customer ON apartment_customer.id = asset_apartment.customer_id
+    LEFT JOIN customers inherited_customer ON inherited_customer.id = apartment_building.customer_id
+    ORDER BY FIELD(a.criticality, 'critical', 'high', 'medium', 'low') ASC, a.name ASC
   `);
 
   const [activity] = await pool.query(`
@@ -490,6 +569,7 @@ async function getDashboardSummary() {
   `);
 
   const users = await listUsers();
+  const customers = await listCustomers();
 
   return {
     summary,
@@ -497,6 +577,7 @@ async function getDashboardSummary() {
     plans,
     assets,
     activity,
+    customers,
     users
   };
 }
@@ -786,18 +867,201 @@ async function deleteUser(id) {
   return { deleted: true };
 }
 
+async function listCustomers() {
+  const [rows] = await pool.query(`
+    SELECT
+      id,
+      customer_number AS customerNumber,
+      name,
+      contact_name AS contactName,
+      email,
+      phone,
+      billing_address AS billingAddress,
+      notes
+    FROM customers
+    ORDER BY customer_number ASC, name ASC
+  `);
+  return rows;
+}
+
+async function generateCustomerNumber() {
+  const [[row]] = await pool.query(`
+    SELECT MAX(CAST(SUBSTRING(customer_number, 2) AS UNSIGNED)) AS maxNumber
+    FROM customers
+    WHERE customer_number REGEXP '^C[0-9]+$'
+  `);
+  const nextNumber = Math.max(Number(row.maxNumber || 153) + 1, 154);
+  return `C${String(nextNumber).padStart(7, "0")}`;
+}
+
+async function normalizeCustomerInput(input, existingCustomer = null) {
+  const name = input.name?.trim();
+  if (!name) {
+    throw createError("Kundenname ist ein Pflichtfeld.", 400);
+  }
+
+  return {
+    customerNumber: input.customerNumber?.trim() || existingCustomer?.customerNumber || await generateCustomerNumber(),
+    name,
+    contactName: input.contactName?.trim() || null,
+    email: input.email?.trim() || null,
+    phone: input.phone?.trim() || null,
+    billingAddress: input.billingAddress?.trim() || null,
+    notes: input.notes?.trim() || null
+  };
+}
+
+function handleDuplicateCustomer(error) {
+  if (error.code === "ER_DUP_ENTRY") {
+    throw createError("Diese Kundennummer ist bereits vergeben.", 409);
+  }
+
+  throw error;
+}
+
+async function assertCustomerExists(customerId) {
+  if (!customerId) {
+    return;
+  }
+
+  const [[customer]] = await pool.execute("SELECT id FROM customers WHERE id = ?", [customerId]);
+  if (!customer) {
+    throw createError("Der ausgewählte Kunde existiert nicht.", 400);
+  }
+}
+
+async function createCustomer(input) {
+  const customer = await normalizeCustomerInput(input);
+
+  try {
+    const [result] = await pool.execute(
+      `
+        INSERT INTO customers (customer_number, name, contact_name, email, phone, billing_address, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        customer.customerNumber,
+        customer.name,
+        customer.contactName,
+        customer.email,
+        customer.phone,
+        customer.billingAddress,
+        customer.notes
+      ]
+    );
+
+    await pool.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('customer', ?, ?)",
+      [result.insertId, `Kunde "${customer.customerNumber} ${customer.name}" angelegt.`]
+    );
+
+    return getCustomerById(result.insertId);
+  } catch (error) {
+    handleDuplicateCustomer(error);
+  }
+}
+
+async function getCustomerById(id) {
+  const [[row]] = await pool.execute(
+    `
+      SELECT
+        id,
+        customer_number AS customerNumber,
+        name,
+        contact_name AS contactName,
+        email,
+        phone,
+        billing_address AS billingAddress,
+        notes
+      FROM customers
+      WHERE id = ?
+    `,
+    [id]
+  );
+  return row;
+}
+
+async function updateCustomer(id, input) {
+  const existingCustomer = await getCustomerById(id);
+  if (!existingCustomer) {
+    throw createError("Kunde nicht gefunden.", 404);
+  }
+
+  const customer = await normalizeCustomerInput(input, existingCustomer);
+
+  try {
+    await pool.execute(
+      `
+        UPDATE customers
+        SET customer_number = ?, name = ?, contact_name = ?, email = ?, phone = ?, billing_address = ?, notes = ?
+        WHERE id = ?
+      `,
+      [
+        customer.customerNumber,
+        customer.name,
+        customer.contactName,
+        customer.email,
+        customer.phone,
+        customer.billingAddress,
+        customer.notes,
+        id
+      ]
+    );
+
+    await pool.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('customer', ?, ?)",
+      [id, `Kunde "${customer.customerNumber} ${customer.name}" aktualisiert.`]
+    );
+
+    return getCustomerById(id);
+  } catch (error) {
+    handleDuplicateCustomer(error);
+  }
+}
+
+async function deleteCustomer(id) {
+  const existingCustomer = await getCustomerById(id);
+  if (!existingCustomer) {
+    throw createError("Kunde nicht gefunden.", 404);
+  }
+
+  const connection = await pool.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.execute("UPDATE buildings SET customer_id = NULL WHERE customer_id = ?", [id]);
+    await connection.execute("UPDATE apartments SET customer_id = NULL WHERE customer_id = ?", [id]);
+    await connection.execute("DELETE FROM customers WHERE id = ?", [id]);
+    await connection.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('customer', ?, ?)",
+      [id, `Kunde "${existingCustomer.customerNumber} ${existingCustomer.name}" gelöscht.`]
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+
+  return { deleted: true };
+}
+
 async function listProperties() {
   const [buildings] = await pool.query(`
     SELECT
       b.id,
+      b.customer_id AS customerId,
+      c.customer_number AS customerNumber,
+      c.name AS customerName,
       b.name,
       b.address,
       b.building_type AS buildingType,
       b.notes,
       COUNT(a.id) AS apartmentCount
     FROM buildings b
+    LEFT JOIN customers c ON c.id = b.customer_id
     LEFT JOIN apartments a ON a.building_id = b.id
-    GROUP BY b.id, b.name, b.address, b.building_type, b.notes
+    GROUP BY b.id, b.customer_id, c.customer_number, c.name, b.name, b.address, b.building_type, b.notes
     ORDER BY b.name ASC
   `);
 
@@ -805,11 +1069,29 @@ async function listProperties() {
     SELECT
       id,
       building_id AS buildingId,
+      customer_id AS customerId,
+      customerNumber,
+      customerName,
       apartment_number AS apartmentNumber,
       name,
       floor,
       notes
-    FROM apartments
+    FROM (
+      SELECT
+        a.id,
+        a.building_id,
+        a.customer_id,
+        COALESCE(apartment_customer.customer_number, building_customer.customer_number) AS customerNumber,
+        COALESCE(apartment_customer.name, building_customer.name) AS customerName,
+        a.apartment_number,
+        a.name,
+        a.floor,
+        a.notes
+      FROM apartments a
+      INNER JOIN buildings b ON b.id = a.building_id
+      LEFT JOIN customers apartment_customer ON apartment_customer.id = a.customer_id
+      LEFT JOIN customers building_customer ON building_customer.id = b.customer_id
+    ) apartment_rows
     ORDER BY apartment_number ASC, name ASC
   `);
 
@@ -839,6 +1121,7 @@ function normalizeBuildingInput(input) {
   }
 
   return {
+    customerId: Number(input.customerId) || null,
     name,
     address: input.address?.trim() || null,
     buildingType,
@@ -848,12 +1131,15 @@ function normalizeBuildingInput(input) {
 
 async function createBuilding(input) {
   const building = normalizeBuildingInput(input);
+  await assertCustomerExists(building.customerId);
+
   const [result] = await pool.execute(
     `
-      INSERT INTO buildings (name, address, building_type, notes)
-      VALUES (?, ?, ?, ?)
+      INSERT INTO buildings (customer_id, name, address, building_type, notes)
+      VALUES (?, ?, ?, ?, ?)
     `,
     [
+      building.customerId,
       building.name,
       building.address,
       building.buildingType,
@@ -874,6 +1160,7 @@ async function getBuildingById(id) {
     `
       SELECT
         id,
+        customer_id AS customerId,
         name,
         address,
         building_type AS buildingType,
@@ -893,13 +1180,16 @@ async function updateBuilding(id, input) {
   }
 
   const building = normalizeBuildingInput(input);
+  await assertCustomerExists(building.customerId);
+
   await pool.execute(
     `
       UPDATE buildings
-      SET name = ?, address = ?, building_type = ?, notes = ?
+      SET customer_id = ?, name = ?, address = ?, building_type = ?, notes = ?
       WHERE id = ?
     `,
     [
+      building.customerId,
       building.name,
       building.address,
       building.buildingType,
@@ -939,6 +1229,18 @@ async function deleteBuilding(id) {
       "DELETE FROM maintenance_plans WHERE target_type = 'building' AND target_id = ?",
       [id]
     );
+    await connection.execute(
+      `
+        UPDATE assets a
+        LEFT JOIN apartments ap ON ap.id = a.apartment_id
+        SET
+          a.building_id = CASE WHEN a.building_id = ? THEN NULL ELSE a.building_id END,
+          a.apartment_id = CASE WHEN ap.building_id = ? THEN NULL ELSE a.apartment_id END
+        WHERE a.building_id = ?
+          OR ap.building_id = ?
+      `,
+      [id, id, id, id]
+    );
     await connection.execute("DELETE FROM buildings WHERE id = ?", [id]);
     await connection.execute(
       "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('building', ?, ?)",
@@ -966,6 +1268,7 @@ function normalizeApartmentInput(input) {
 
   return {
     buildingId,
+    customerId: Number(input.customerId) || null,
     apartmentNumber,
     name,
     floor: input.floor?.trim() || null,
@@ -987,14 +1290,17 @@ function handleApartmentWriteError(error) {
 
 async function createApartment(input) {
   const apartment = normalizeApartmentInput(input);
+  await assertCustomerExists(apartment.customerId);
+
   try {
     const [result] = await pool.execute(
       `
-        INSERT INTO apartments (building_id, apartment_number, name, floor, notes)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO apartments (building_id, customer_id, apartment_number, name, floor, notes)
+        VALUES (?, ?, ?, ?, ?, ?)
       `,
       [
         apartment.buildingId,
+        apartment.customerId,
         apartment.apartmentNumber,
         apartment.name,
         apartment.floor,
@@ -1019,6 +1325,7 @@ async function getApartmentById(id) {
       SELECT
         id,
         building_id AS buildingId,
+        customer_id AS customerId,
         apartment_number AS apartmentNumber,
         name,
         floor,
@@ -1038,15 +1345,18 @@ async function updateApartment(id, input) {
   }
 
   const apartment = normalizeApartmentInput(input);
+  await assertCustomerExists(apartment.customerId);
+
   try {
     await pool.execute(
       `
         UPDATE apartments
-        SET building_id = ?, apartment_number = ?, name = ?, floor = ?, notes = ?
+        SET building_id = ?, customer_id = ?, apartment_number = ?, name = ?, floor = ?, notes = ?
         WHERE id = ?
       `,
       [
         apartment.buildingId,
+        apartment.customerId,
         apartment.apartmentNumber,
         apartment.name,
         apartment.floor,
@@ -1079,6 +1389,7 @@ async function deleteApartment(id) {
       "DELETE FROM maintenance_plans WHERE target_type = 'apartment' AND target_id = ?",
       [id]
     );
+    await connection.execute("UPDATE assets SET apartment_id = NULL WHERE apartment_id = ?", [id]);
     await connection.execute("DELETE FROM apartments WHERE id = ?", [id]);
     await connection.execute(
       "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('apartment', ?, ?)",
@@ -1097,43 +1408,28 @@ async function deleteApartment(id) {
 
 async function listMaintenanceTargets() {
   const [rows] = await pool.query(`
-    SELECT targetType, targetId, label, subtitle
-    FROM (
-      SELECT
-        'apartment' AS targetType,
-        a.id AS targetId,
-        CONCAT(b.name, ' / ', a.name) AS label,
-        CONCAT('Appartment ', a.apartment_number, COALESCE(CONCAT(' - ', a.floor), '')) AS subtitle,
-        1 AS sortOrder
-      FROM apartments a
-      INNER JOIN buildings b ON b.id = a.building_id
-
-      UNION ALL
-
-      SELECT
-        'building' AS targetType,
-        b.id AS targetId,
-        b.name AS label,
-        COALESCE(b.address, 'Gebäude ohne Appartments') AS subtitle,
-        2 AS sortOrder
-      FROM buildings b
-      WHERE NOT EXISTS (
-        SELECT 1
-        FROM apartments a
-        WHERE a.building_id = b.id
-      )
-
-      UNION ALL
-
-      SELECT
-        'asset' AS targetType,
-        a.id AS targetId,
-        a.name AS label,
-        CONCAT(a.asset_type, ' - ', a.location) AS subtitle,
-        3 AS sortOrder
-      FROM assets a
-    ) targets
-    ORDER BY sortOrder ASC, label ASC
+    SELECT
+      'asset' AS targetType,
+      a.id AS targetId,
+      a.name AS label,
+      CONCAT_WS(
+        ' - ',
+        a.asset_type,
+        CASE
+          WHEN a.apartment_id IS NOT NULL THEN CONCAT(apartment_building.name, ' / ', asset_apartment.name)
+          WHEN a.building_id IS NOT NULL THEN asset_building.name
+          ELSE a.location
+        END,
+        COALESCE(apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number)
+      ) AS subtitle
+    FROM assets a
+    LEFT JOIN buildings asset_building ON asset_building.id = a.building_id
+    LEFT JOIN apartments asset_apartment ON asset_apartment.id = a.apartment_id
+    LEFT JOIN buildings apartment_building ON apartment_building.id = asset_apartment.building_id
+    LEFT JOIN customers building_customer ON building_customer.id = asset_building.customer_id
+    LEFT JOIN customers apartment_customer ON apartment_customer.id = asset_apartment.customer_id
+    LEFT JOIN customers inherited_customer ON inherited_customer.id = apartment_building.customer_id
+    ORDER BY a.name ASC
   `);
 
   return rows;
@@ -1304,11 +1600,75 @@ async function getCalendarEvents(startDate, endDate) {
 
 async function listAssets() {
   const [rows] = await pool.query(`
-    SELECT id, name, asset_type AS assetType, location, serial_number AS serialNumber, criticality
-    FROM assets
-    ORDER BY name ASC
+    SELECT
+      a.id,
+      a.building_id AS buildingId,
+      a.apartment_id AS apartmentId,
+      CASE
+        WHEN a.apartment_id IS NOT NULL THEN 'apartment'
+        WHEN a.building_id IS NOT NULL THEN 'building'
+        ELSE NULL
+      END AS assignmentType,
+      COALESCE(a.apartment_id, a.building_id) AS assignmentId,
+      CASE
+        WHEN a.apartment_id IS NOT NULL THEN CONCAT(apartment_building.name, ' / ', asset_apartment.name)
+        WHEN a.building_id IS NOT NULL THEN asset_building.name
+        ELSE NULL
+      END AS assignmentLabel,
+      COALESCE(apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number) AS customerNumber,
+      COALESCE(apartment_customer.name, inherited_customer.name, building_customer.name) AS customerName,
+      a.name,
+      a.asset_type AS assetType,
+      a.location,
+      a.serial_number AS serialNumber,
+      a.criticality
+    FROM assets a
+    LEFT JOIN buildings asset_building ON asset_building.id = a.building_id
+    LEFT JOIN apartments asset_apartment ON asset_apartment.id = a.apartment_id
+    LEFT JOIN buildings apartment_building ON apartment_building.id = asset_apartment.building_id
+    LEFT JOIN customers building_customer ON building_customer.id = asset_building.customer_id
+    LEFT JOIN customers apartment_customer ON apartment_customer.id = asset_apartment.customer_id
+    LEFT JOIN customers inherited_customer ON inherited_customer.id = apartment_building.customer_id
+    ORDER BY a.name ASC
   `);
   return rows;
+}
+
+function parseAssetAssignment(input) {
+  const rawTarget = input.propertyTarget || (
+    input.assignmentType && input.assignmentId
+      ? `${input.assignmentType}:${input.assignmentId}`
+      : ""
+  );
+
+  if (!rawTarget) {
+    return {
+      buildingId: null,
+      apartmentId: null
+    };
+  }
+
+  const [targetType, targetIdText] = String(rawTarget).split(":");
+  const targetId = Number(targetIdText);
+  if (!targetId) {
+    throw createError("Ungültige Objektzuweisung.", 400);
+  }
+
+  if (targetType === "building") {
+    return {
+      buildingId: targetId,
+      apartmentId: null
+    };
+  }
+
+  if (targetType === "apartment") {
+    return {
+      buildingId: null,
+      apartmentId: targetId
+    };
+  }
+
+  throw createError("Ungültige Objektzuweisung.", 400);
 }
 
 function normalizeAssetInput(input) {
@@ -1317,6 +1677,7 @@ function normalizeAssetInput(input) {
   const location = input.location?.trim();
   const serialNumber = input.serialNumber?.trim() || null;
   const criticality = input.criticality || "medium";
+  const assignment = parseAssetAssignment(input);
   const allowedCriticalities = new Set(["low", "medium", "high", "critical"]);
 
   if (!name || !assetType || !location) {
@@ -1328,6 +1689,7 @@ function normalizeAssetInput(input) {
   }
 
   return {
+    ...assignment,
     name,
     assetType,
     location,
@@ -1336,14 +1698,34 @@ function normalizeAssetInput(input) {
   };
 }
 
+async function assertAssetAssignment(asset) {
+  if (asset.buildingId) {
+    const [[building]] = await pool.execute("SELECT id FROM buildings WHERE id = ?", [asset.buildingId]);
+    if (!building) {
+      throw createError("Das ausgewählte Gebäude existiert nicht.", 400);
+    }
+  }
+
+  if (asset.apartmentId) {
+    const [[apartment]] = await pool.execute("SELECT id FROM apartments WHERE id = ?", [asset.apartmentId]);
+    if (!apartment) {
+      throw createError("Das ausgewählte Appartment existiert nicht.", 400);
+    }
+  }
+}
+
 async function createAsset(input) {
   const asset = normalizeAssetInput(input);
+  await assertAssetAssignment(asset);
+
   const [result] = await pool.execute(
     `
-      INSERT INTO assets (name, asset_type, location, serial_number, criticality)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO assets (building_id, apartment_id, name, asset_type, location, serial_number, criticality)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
     `,
     [
+      asset.buildingId,
+      asset.apartmentId,
       asset.name,
       asset.assetType,
       asset.location,
@@ -1363,9 +1745,36 @@ async function createAsset(input) {
 async function getAssetById(id) {
   const [[row]] = await pool.execute(
     `
-      SELECT id, name, asset_type AS assetType, location, serial_number AS serialNumber, criticality
-      FROM assets
-      WHERE id = ?
+      SELECT
+        a.id,
+        a.building_id AS buildingId,
+        a.apartment_id AS apartmentId,
+        CASE
+          WHEN a.apartment_id IS NOT NULL THEN 'apartment'
+          WHEN a.building_id IS NOT NULL THEN 'building'
+          ELSE NULL
+        END AS assignmentType,
+        COALESCE(a.apartment_id, a.building_id) AS assignmentId,
+        CASE
+          WHEN a.apartment_id IS NOT NULL THEN CONCAT(apartment_building.name, ' / ', asset_apartment.name)
+          WHEN a.building_id IS NOT NULL THEN asset_building.name
+          ELSE NULL
+        END AS assignmentLabel,
+        COALESCE(apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number) AS customerNumber,
+        COALESCE(apartment_customer.name, inherited_customer.name, building_customer.name) AS customerName,
+        a.name,
+        a.asset_type AS assetType,
+        a.location,
+        a.serial_number AS serialNumber,
+        a.criticality
+      FROM assets a
+      LEFT JOIN buildings asset_building ON asset_building.id = a.building_id
+      LEFT JOIN apartments asset_apartment ON asset_apartment.id = a.apartment_id
+      LEFT JOIN buildings apartment_building ON apartment_building.id = asset_apartment.building_id
+      LEFT JOIN customers building_customer ON building_customer.id = asset_building.customer_id
+      LEFT JOIN customers apartment_customer ON apartment_customer.id = asset_apartment.customer_id
+      LEFT JOIN customers inherited_customer ON inherited_customer.id = apartment_building.customer_id
+      WHERE a.id = ?
     `,
     [id]
   );
@@ -1379,13 +1788,17 @@ async function updateAsset(id, input) {
   }
 
   const asset = normalizeAssetInput(input);
+  await assertAssetAssignment(asset);
+
   await pool.execute(
     `
       UPDATE assets
-      SET name = ?, asset_type = ?, location = ?, serial_number = ?, criticality = ?
+      SET building_id = ?, apartment_id = ?, name = ?, asset_type = ?, location = ?, serial_number = ?, criticality = ?
       WHERE id = ?
     `,
     [
+      asset.buildingId,
+      asset.apartmentId,
       asset.name,
       asset.assetType,
       asset.location,
@@ -1519,6 +1932,10 @@ module.exports = {
   createUser,
   updateUser,
   deleteUser,
+  listCustomers,
+  createCustomer,
+  updateCustomer,
+  deleteCustomer,
   listProperties,
   createBuilding,
   updateBuilding,

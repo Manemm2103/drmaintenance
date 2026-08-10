@@ -13,15 +13,19 @@ const els = {
   planCount: document.querySelector("#planCount"),
   orderCount: document.querySelector("#orderCount"),
   overdueCount: document.querySelector("#overdueCount"),
-  userCount: document.querySelector("#userCount"),
+  customerCount: document.querySelector("#customerCount"),
   workOrderRows: document.querySelector("#workOrderRows"),
   assetList: document.querySelector("#assetList"),
   planList: document.querySelector("#planList"),
   activityList: document.querySelector("#activityList"),
+  customerList: document.querySelector("#customerList"),
   userList: document.querySelector("#userList"),
   propertyList: document.querySelector("#propertyList"),
   assetSelect: document.querySelector("#assetSelect"),
+  assetPropertyTargetSelect: document.querySelector("#assetPropertyTargetSelect"),
   apartmentBuildingSelect: document.querySelector("#apartmentBuildingSelect"),
+  buildingCustomerSelect: document.querySelector("#buildingCustomerSelect"),
+  apartmentCustomerSelect: document.querySelector("#apartmentCustomerSelect"),
   maintenanceTargetSelect: document.querySelector("#maintenanceTargetSelect"),
   maintenanceDueDate: document.querySelector("#maintenanceDueDate"),
   calendarGrid: document.querySelector("#calendarGrid"),
@@ -43,6 +47,10 @@ const els = {
   apartmentIdInput: document.querySelector("#apartmentIdInput"),
   apartmentSubmitButton: document.querySelector("#apartmentSubmitButton"),
   apartmentNewButton: document.querySelector("#apartmentNewButton"),
+  customerForm: document.querySelector("#customerForm"),
+  customerIdInput: document.querySelector("#customerIdInput"),
+  customerSubmitButton: document.querySelector("#customerSubmitButton"),
+  customerNewButton: document.querySelector("#customerNewButton"),
   userForm: document.querySelector("#userForm"),
   toast: document.querySelector("#toast")
 };
@@ -84,6 +92,14 @@ const viewConfig = {
     actionView: "planung",
     scrollTarget: "new-maintenance"
   },
+  kunden: {
+    eyebrow: "Stammdaten",
+    title: "Kunden verwalten.",
+    actionLabel: "Kunde",
+    actionTitle: "Neuen Kunden anlegen",
+    actionView: "kunden",
+    scrollTarget: "customerForm"
+  },
   wartungsobjekte: {
     eyebrow: "Inventar",
     title: "Wartungsobjekte verwalten.",
@@ -123,6 +139,7 @@ const hashViewMap = {
   kalender: "dashboard",
   auftraege: "dashboard",
   "new-work-order": "dashboard",
+  kunden: "kunden",
   wartungsobjekte: "wartungsobjekte",
   gebaeude: "gebaeude",
   planung: "planung",
@@ -133,6 +150,7 @@ const hashViewMap = {
 let visibleMonth = startOfMonth(new Date());
 let latestAssets = [];
 let latestProperties = [];
+let latestCustomers = [];
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -269,20 +287,23 @@ async function loadCurrentUser() {
 }
 
 function renderSummary(payload) {
-  const { summary, workOrders, assets, plans, activity, users } = payload;
+  const { summary, workOrders, assets, plans, activity, customers, users } = payload;
   latestAssets = assets || [];
+  latestCustomers = customers || [];
 
   els.assetCount.textContent = summary.assetCount;
   els.planCount.textContent = summary.activePlanCount;
   els.orderCount.textContent = summary.openWorkOrderCount;
   els.overdueCount.textContent = summary.overdueCount;
-  els.userCount.textContent = summary.activeUserCount;
+  els.customerCount.textContent = summary.customerCount;
 
   renderWorkOrders(workOrders);
   renderAssets(assets);
   renderPlans(plans);
   renderActivity(activity);
+  renderCustomers(customers);
   renderUsers(users);
+  renderCustomerOptions(customers);
   renderAssetOptions(assets);
 }
 
@@ -323,6 +344,8 @@ function renderAssets(assets) {
       <div>
         <strong>${escapeHtml(asset.name)}</strong>
         <div class="list-meta">
+          <span>${escapeHtml(formatCustomerLabel(asset.customerNumber, asset.customerName))}</span>
+          <span>${escapeHtml(asset.assignmentLabel || "Keine Zuordnung")}</span>
           <span>${escapeHtml(asset.assetType)}</span>
           <span>${escapeHtml(asset.location)}</span>
           <span>${priorityLabels[asset.criticality] || asset.criticality}</span>
@@ -395,9 +418,42 @@ function renderUsers(users) {
   `).join("");
 }
 
+function formatCustomerLabel(customerNumber, customerName) {
+  if (!customerNumber && !customerName) {
+    return "Kein Kunde";
+  }
+
+  return [customerNumber, customerName].filter(Boolean).join(" - ");
+}
+
+function renderCustomers(customers) {
+  if (!customers || customers.length === 0) {
+    els.customerList.innerHTML = '<div class="list-item">Keine Kunden angelegt.</div>';
+    return;
+  }
+
+  els.customerList.innerHTML = customers.map((customer) => `
+    <div class="user-item clickable-list-item" role="button" tabindex="0" data-edit-customer="${customer.id}" title="Kunde bearbeiten">
+      <div>
+        <strong>${escapeHtml(customer.name)}</strong>
+        <div class="list-meta">
+          <span>${escapeHtml(customer.customerNumber)}</span>
+          <span>${escapeHtml(customer.contactName || "Kein Ansprechpartner")}</span>
+          <span>${escapeHtml(customer.email || "Keine E-Mail")}</span>
+          <span>${escapeHtml(customer.phone || "Kein Telefon")}</span>
+        </div>
+      </div>
+      <div class="user-actions">
+        <button class="compact-button" type="button" title="Kunde löschen" aria-label="Kunde löschen" data-delete-customer="${customer.id}">X</button>
+      </div>
+    </div>
+  `).join("");
+}
+
 function renderProperties(properties) {
   latestProperties = properties || [];
   renderApartmentBuildingOptions(properties);
+  renderAssetAssignmentOptions(properties);
 
   if (!properties || properties.length === 0) {
     els.propertyList.innerHTML = '<div class="list-item">Keine Gebäude angelegt.</div>';
@@ -410,6 +466,7 @@ function renderProperties(properties) {
         <div>
           <strong>${escapeHtml(building.name)}</strong>
           <div class="list-meta">
+            <span>${escapeHtml(formatCustomerLabel(building.customerNumber, building.customerName))}</span>
             <span>${buildingTypeLabels[building.buildingType] || building.buildingType}</span>
             <span>${escapeHtml(building.address || "Keine Adresse")}</span>
             <span>${building.apartments.length === 0 ? "Als Wartungsobjekt verfügbar" : `${building.apartments.length} Appartments`}</span>
@@ -425,6 +482,7 @@ function renderProperties(properties) {
                 <div>
                   <span>${escapeHtml(apartment.name)}</span>
                   <span class="muted">${escapeHtml(apartment.apartmentNumber)}${apartment.floor ? ` - ${escapeHtml(apartment.floor)}` : ""}</span>
+                  <span class="muted">${escapeHtml(formatCustomerLabel(apartment.customerNumber, apartment.customerName))}</span>
                 </div>
                 <button class="compact-button" type="button" title="Appartment löschen" aria-label="Appartment löschen" data-delete-apartment="${apartment.id}">X</button>
               </div>
@@ -492,17 +550,50 @@ function renderAssetOptions(assets) {
   els.assetSelect.value = currentValue;
 }
 
+function renderCustomerOptions(customers) {
+  const buildingValue = els.buildingCustomerSelect.value;
+  const apartmentValue = els.apartmentCustomerSelect.value;
+  const options = (customers || []).map((customer) => (
+    `<option value="${customer.id}">${escapeHtml(formatCustomerLabel(customer.customerNumber, customer.name))}</option>`
+  )).join("");
+
+  els.buildingCustomerSelect.innerHTML = '<option value="">Kein Kunde zugewiesen</option>' + options;
+  els.apartmentCustomerSelect.innerHTML = '<option value="">Wie Gebäude / kein Kunde</option>' + options;
+  els.buildingCustomerSelect.value = buildingValue;
+  els.apartmentCustomerSelect.value = apartmentValue;
+}
+
 function renderApartmentBuildingOptions(properties) {
   const currentValue = els.apartmentBuildingSelect.value;
   els.apartmentBuildingSelect.innerHTML = '<option value="">Gebäude auswählen</option>' + properties.map((building) => (
-    `<option value="${building.id}">${escapeHtml(building.name)}</option>`
+    `<option value="${building.id}">${escapeHtml(building.name)}${building.customerNumber ? ` - ${escapeHtml(building.customerNumber)}` : ""}</option>`
   )).join("");
   els.apartmentBuildingSelect.value = currentValue;
 }
 
+function renderAssetAssignmentOptions(properties) {
+  const currentValue = els.assetPropertyTargetSelect.value;
+  const options = [];
+
+  for (const building of properties || []) {
+    options.push(
+      `<option value="building:${building.id}">${escapeHtml(building.name)}${building.customerNumber ? ` - ${escapeHtml(building.customerNumber)}` : ""}</option>`
+    );
+
+    for (const apartment of building.apartments || []) {
+      options.push(
+        `<option value="apartment:${apartment.id}">${escapeHtml(building.name)} / ${escapeHtml(apartment.name)}${apartment.customerNumber ? ` - ${escapeHtml(apartment.customerNumber)}` : ""}</option>`
+      );
+    }
+  }
+
+  els.assetPropertyTargetSelect.innerHTML = '<option value="">Noch nicht zugewiesen</option>' + options.join("");
+  els.assetPropertyTargetSelect.value = currentValue;
+}
+
 function renderMaintenanceTargetOptions(targets) {
   const currentValue = els.maintenanceTargetSelect.value;
-  els.maintenanceTargetSelect.innerHTML = '<option value="">Objekt, Gebäude oder Appartment auswählen</option>' + targets.map((target) => (
+  els.maintenanceTargetSelect.innerHTML = '<option value="">Wartungsobjekt auswählen</option>' + targets.map((target) => (
     `<option value="${target.targetType}:${target.targetId}">${escapeHtml(target.label)} - ${escapeHtml(target.subtitle || "")}</option>`
   )).join("");
   els.maintenanceTargetSelect.value = currentValue;
@@ -516,7 +607,8 @@ function getAssetFormPayload() {
     assetType: data.assetType,
     location: data.location,
     serialNumber: data.serialNumber,
-    criticality: data.criticality
+    criticality: data.criticality,
+    propertyTarget: data.propertyTarget
   };
 }
 
@@ -533,6 +625,9 @@ function loadAssetIntoForm(asset) {
   els.assetForm.elements.location.value = asset.location || "";
   els.assetForm.elements.serialNumber.value = asset.serialNumber || "";
   els.assetForm.elements.criticality.value = asset.criticality || "medium";
+  els.assetForm.elements.propertyTarget.value = asset.assignmentType && asset.assignmentId
+    ? `${asset.assignmentType}:${asset.assignmentId}`
+    : "";
   els.assetSubmitButton.textContent = "Änderungen speichern";
   setView("wartungsobjekte", { updateHash: true, scrollTop: false });
   window.setTimeout(() => scrollToTarget("assetForm"), 0);
@@ -546,6 +641,40 @@ function duplicateAssetInForm(asset) {
   });
   els.assetIdInput.value = "";
   els.assetSubmitButton.textContent = "Kopie speichern";
+}
+
+function getCustomerFormPayload() {
+  const data = Object.fromEntries(new FormData(els.customerForm));
+  return {
+    id: data.customerId ? Number(data.customerId) : null,
+    customerNumber: data.customerNumber,
+    name: data.name,
+    contactName: data.contactName,
+    email: data.email,
+    phone: data.phone,
+    billingAddress: data.billingAddress,
+    notes: data.notes
+  };
+}
+
+function resetCustomerForm() {
+  els.customerForm.reset();
+  els.customerIdInput.value = "";
+  els.customerSubmitButton.textContent = "Kunde speichern";
+}
+
+function loadCustomerIntoForm(customer) {
+  els.customerForm.elements.customerId.value = customer.id;
+  els.customerForm.elements.customerNumber.value = customer.customerNumber || "";
+  els.customerForm.elements.name.value = customer.name || "";
+  els.customerForm.elements.contactName.value = customer.contactName || "";
+  els.customerForm.elements.email.value = customer.email || "";
+  els.customerForm.elements.phone.value = customer.phone || "";
+  els.customerForm.elements.billingAddress.value = customer.billingAddress || "";
+  els.customerForm.elements.notes.value = customer.notes || "";
+  els.customerSubmitButton.textContent = "Änderungen speichern";
+  setView("kunden", { updateHash: true, scrollTop: false });
+  window.setTimeout(() => scrollToTarget("customerForm"), 0);
 }
 
 function findApartmentById(id) {
@@ -567,6 +696,7 @@ function resetBuildingForm() {
 
 function loadBuildingIntoForm(building) {
   els.buildingForm.elements.buildingId.value = building.id;
+  els.buildingForm.elements.customerId.value = building.customerId || "";
   els.buildingForm.elements.name.value = building.name || "";
   els.buildingForm.elements.buildingType.value = building.buildingType || "private_house";
   els.buildingForm.elements.address.value = building.address || "";
@@ -584,6 +714,7 @@ function resetApartmentForm() {
 function loadApartmentIntoForm(apartment) {
   els.apartmentForm.elements.apartmentId.value = apartment.id;
   els.apartmentForm.elements.buildingId.value = apartment.buildingId || "";
+  els.apartmentForm.elements.customerId.value = apartment.customerId || "";
   els.apartmentForm.elements.apartmentNumber.value = apartment.apartmentNumber || "";
   els.apartmentForm.elements.name.value = apartment.name || "";
   els.apartmentForm.elements.floor.value = apartment.floor || "";
@@ -636,6 +767,18 @@ async function deleteUser(id) {
     method: "DELETE"
   });
   showToast("Benutzer gelöscht.");
+  await loadDashboard();
+}
+
+async function deleteCustomer(id) {
+  if (!window.confirm("Kunde wirklich löschen? Gebäude und Appartments bleiben erhalten, verlieren aber die Kundenzuordnung.")) {
+    return;
+  }
+
+  await api(`/api/customers/${id}`, {
+    method: "DELETE"
+  });
+  showToast("Kunde gelöscht.");
   await loadDashboard();
 }
 
@@ -771,6 +914,13 @@ function bindEvents() {
       deleteUser(deleteUserButton.dataset.deleteUser).catch((error) => showToast(error.message));
     }
 
+    const deleteCustomerButton = event.target.closest("[data-delete-customer]");
+    if (deleteCustomerButton) {
+      event.stopPropagation();
+      deleteCustomer(deleteCustomerButton.dataset.deleteCustomer).catch((error) => showToast(error.message));
+      return;
+    }
+
     const deleteAssetButton = event.target.closest("[data-delete-asset]");
     if (deleteAssetButton) {
       event.stopPropagation();
@@ -815,6 +965,14 @@ function bindEvents() {
       }
     }
 
+    const editCustomer = event.target.closest("[data-edit-customer]");
+    if (editCustomer) {
+      const customer = latestCustomers.find((item) => String(item.id) === String(editCustomer.dataset.editCustomer));
+      if (customer) {
+        loadCustomerIntoForm(customer);
+      }
+    }
+
     const editApartment = event.target.closest("[data-edit-apartment]");
     if (editApartment) {
       event.stopPropagation();
@@ -849,6 +1007,16 @@ function bindEvents() {
       const asset = latestAssets.find((item) => String(item.id) === String(editAsset.dataset.editAsset));
       if (asset) {
         loadAssetIntoForm(asset);
+      }
+      return;
+    }
+
+    const editCustomer = event.target.closest("[data-edit-customer]");
+    if (editCustomer) {
+      event.preventDefault();
+      const customer = latestCustomers.find((item) => String(item.id) === String(editCustomer.dataset.editCustomer));
+      if (customer) {
+        loadCustomerIntoForm(customer);
       }
       return;
     }
@@ -926,7 +1094,8 @@ function bindEvents() {
         assetType: data.assetType,
         location: data.location,
         serialNumber: data.serialNumber,
-        criticality: data.criticality
+        criticality: data.criticality,
+        propertyTarget: data.propertyTarget
       })
     });
 
@@ -937,6 +1106,31 @@ function bindEvents() {
 
   els.assetNewButton.addEventListener("click", resetAssetForm);
 
+  els.customerForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = getCustomerFormPayload();
+    const isUpdate = Boolean(data.id);
+
+    await api(isUpdate ? `/api/customers/${data.id}` : "/api/customers", {
+      method: isUpdate ? "PATCH" : "POST",
+      body: JSON.stringify({
+        customerNumber: data.customerNumber,
+        name: data.name,
+        contactName: data.contactName,
+        email: data.email,
+        phone: data.phone,
+        billingAddress: data.billingAddress,
+        notes: data.notes
+      })
+    });
+
+    resetCustomerForm();
+    showToast(isUpdate ? "Kunde aktualisiert." : "Kunde angelegt.");
+    await loadDashboard();
+  });
+
+  els.customerNewButton.addEventListener("click", resetCustomerForm);
+
   els.buildingForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = Object.fromEntries(new FormData(els.buildingForm));
@@ -945,6 +1139,7 @@ function bindEvents() {
     await api(isUpdate ? `/api/buildings/${data.buildingId}` : "/api/buildings", {
       method: isUpdate ? "PATCH" : "POST",
       body: JSON.stringify({
+        customerId: data.customerId ? Number(data.customerId) : null,
         name: data.name,
         address: data.address,
         buildingType: data.buildingType
@@ -965,6 +1160,7 @@ function bindEvents() {
       method: isUpdate ? "PATCH" : "POST",
       body: JSON.stringify({
         buildingId: Number(data.buildingId),
+        customerId: data.customerId ? Number(data.customerId) : null,
         apartmentNumber: data.apartmentNumber,
         name: data.name,
         floor: data.floor

@@ -21,6 +21,7 @@
         <nav class="nav">
           <a href="#dashboard" class="active" data-view-link="dashboard" data-nav-key="dashboard">Dashboard</a>
           <a href="#kalender" data-view-link="dashboard" data-nav-key="kalender" data-scroll-target="kalender">Kalender</a>
+          <a href="#kunden" data-view-link="kunden">Kunden</a>
           <a href="#wartungsobjekte" data-view-link="wartungsobjekte">Objekte</a>
           <a href="#gebaeude" data-view-link="gebaeude">Gebäude</a>
           <a href="#planung" data-view-link="planung">Wartungspläne</a>
@@ -69,8 +70,8 @@
               <strong id="overdueCount">-</strong>
             </article>
             <article class="metric-card">
-              <span>Aktive Benutzer</span>
-              <strong id="userCount">-</strong>
+              <span>Kunden</span>
+              <strong id="customerCount">-</strong>
             </article>
           </section>
 
@@ -102,6 +103,57 @@
           </section>
         </section>
 
+        <section class="view" data-view="kunden">
+          <section class="workspace-grid single-view-grid">
+          <article class="panel wide" id="kunden">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Stammdaten</p>
+                <h2>Kunden</h2>
+              </div>
+            </div>
+            <div class="users-layout">
+              <form id="customerForm" class="form-grid">
+                <input type="hidden" name="customerId" id="customerIdInput">
+                <label>
+                  Kundennummer
+                  <input name="customerNumber" placeholder="wird automatisch vergeben">
+                </label>
+                <label>
+                  Kundenname
+                  <input name="name" placeholder="z.B. Müller Immobilien" required>
+                </label>
+                <label>
+                  Ansprechpartner
+                  <input name="contactName" placeholder="z.B. Max Müller">
+                </label>
+                <label>
+                  E-Mail
+                  <input name="email" type="email" placeholder="kunde@example.com">
+                </label>
+                <label>
+                  Telefon
+                  <input name="phone" placeholder="+49 ...">
+                </label>
+                <label>
+                  Rechnungsadresse
+                  <input name="billingAddress" placeholder="Straße, Ort">
+                </label>
+                <label class="span-2">
+                  Notizen
+                  <textarea name="notes" rows="3" placeholder="Interne Hinweise"></textarea>
+                </label>
+                <div class="form-actions span-2">
+                  <button class="primary-button" type="submit" id="customerSubmitButton">Kunde speichern</button>
+                  <button class="ghost-button" type="button" id="customerNewButton">Neu</button>
+                </div>
+              </form>
+              <div class="user-list" id="customerList"></div>
+            </div>
+          </article>
+          </section>
+        </section>
+
         <section class="view" data-view="gebaeude">
           <section class="workspace-grid single-view-grid">
           <article class="panel wide" id="gebaeude">
@@ -115,6 +167,12 @@
               <div class="property-forms">
                 <form id="buildingForm" class="form-grid">
                   <input type="hidden" name="buildingId" id="buildingIdInput">
+                  <label class="span-2">
+                    Kunde
+                    <select name="customerId" id="buildingCustomerSelect">
+                      <option value="">Kein Kunde zugewiesen</option>
+                    </select>
+                  </label>
                   <label>
                     Gebäudename
                     <input name="name" placeholder="z.B. Wohnhaus Gartenblick" required>
@@ -144,6 +202,12 @@
                     Gebäude
                     <select name="buildingId" id="apartmentBuildingSelect" required>
                       <option value="">Gebäude auswählen</option>
+                    </select>
+                  </label>
+                  <label>
+                    Kunde
+                    <select name="customerId" id="apartmentCustomerSelect">
+                      <option value="">Wie Gebäude / kein Kunde</option>
                     </select>
                   </label>
                   <label>
@@ -253,6 +317,12 @@
             </div>
             <form id="assetForm" class="form-grid compact-form">
               <input type="hidden" name="assetId" id="assetIdInput">
+              <label class="span-2">
+                Zuordnung
+                <select name="propertyTarget" id="assetPropertyTargetSelect">
+                  <option value="">Noch nicht zugewiesen</option>
+                </select>
+              </label>
               <label>
                 Name
                 <input name="name" placeholder="z.B. Klimaanlage Wellnessbereich" required>
@@ -306,7 +376,7 @@
                 <label>
                   Wartungsziel
                   <select name="target" id="maintenanceTargetSelect" required>
-                    <option value="">Objekt, Gebäude oder Appartment auswählen</option>
+                    <option value="">Wartungsobjekt auswählen</option>
                   </select>
                 </label>
                 <button class="ghost-button" type="button" data-view-target="wartungsobjekte" data-scroll-target="assetForm">Objekt anlegen</button>
