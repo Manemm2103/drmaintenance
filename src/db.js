@@ -1861,28 +1861,66 @@ async function deleteApartment(id) {
 
 async function listMaintenanceTargets() {
   const [rows] = await pool.query(`
-    SELECT
-      'asset' AS targetType,
-      a.id AS targetId,
-      a.name AS label,
-      CONCAT_WS(
-        ' - ',
-        a.asset_type,
-        CASE
-          WHEN a.apartment_id IS NOT NULL THEN CONCAT(apartment_building.name, ' / ', asset_apartment.name)
-          WHEN a.building_id IS NOT NULL THEN asset_building.name
-          ELSE a.location
-        END,
-        COALESCE(apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number)
-      ) AS subtitle
-    FROM assets a
-    LEFT JOIN buildings asset_building ON asset_building.id = a.building_id
-    LEFT JOIN apartments asset_apartment ON asset_apartment.id = a.apartment_id
-    LEFT JOIN buildings apartment_building ON apartment_building.id = asset_apartment.building_id
-    LEFT JOIN customers building_customer ON building_customer.id = asset_building.customer_id
-    LEFT JOIN customers apartment_customer ON apartment_customer.id = asset_apartment.customer_id
-    LEFT JOIN customers inherited_customer ON inherited_customer.id = apartment_building.customer_id
-    ORDER BY a.name ASC
+    SELECT targetType, targetId, label, subtitle
+    FROM (
+      SELECT
+        'asset' AS targetType,
+        a.id AS targetId,
+        a.name AS label,
+        CONCAT_WS(
+          ' - ',
+          'Wartungsobjekt',
+          a.asset_type,
+          CASE
+            WHEN a.apartment_id IS NOT NULL THEN CONCAT(apartment_building.name, ' / ', asset_apartment.name)
+            WHEN a.building_id IS NOT NULL THEN asset_building.name
+            ELSE a.location
+          END,
+          COALESCE(apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number)
+        ) AS subtitle
+      FROM assets a
+      LEFT JOIN buildings asset_building ON asset_building.id = a.building_id
+      LEFT JOIN apartments asset_apartment ON asset_apartment.id = a.apartment_id
+      LEFT JOIN buildings apartment_building ON apartment_building.id = asset_apartment.building_id
+      LEFT JOIN customers building_customer ON building_customer.id = asset_building.customer_id
+      LEFT JOIN customers apartment_customer ON apartment_customer.id = asset_apartment.customer_id
+      LEFT JOIN customers inherited_customer ON inherited_customer.id = apartment_building.customer_id
+
+      UNION ALL
+
+      SELECT
+        'apartment' AS targetType,
+        ap.id AS targetId,
+        CONCAT(b.name, ' / ', ap.name) AS label,
+        CONCAT_WS(
+          ' - ',
+          'Appartment',
+          COALESCE(apartment_customer.customer_number, building_customer.customer_number),
+          b.address
+        ) AS subtitle
+      FROM apartments ap
+      INNER JOIN buildings b ON b.id = ap.building_id
+      LEFT JOIN customers apartment_customer ON apartment_customer.id = ap.customer_id
+      LEFT JOIN customers building_customer ON building_customer.id = b.customer_id
+
+      UNION ALL
+
+      SELECT
+        'building' AS targetType,
+        b.id AS targetId,
+        b.name AS label,
+        CONCAT_WS(
+          ' - ',
+          'Gebäude ohne Appartments',
+          c.customer_number,
+          b.address
+        ) AS subtitle
+      FROM buildings b
+      LEFT JOIN customers c ON c.id = b.customer_id
+      LEFT JOIN apartments ap ON ap.building_id = b.id
+      WHERE ap.id IS NULL
+    ) targets
+    ORDER BY label ASC, subtitle ASC
   `);
 
   return rows;
@@ -2238,9 +2276,21 @@ function normalizeAssetInput(input) {
 
 async function assertAssetAssignment(asset) {
   if (asset.buildingId) {
-    const [[building]] = await pool.execute("SELECT id FROM buildings WHERE id = ?", [asset.buildingId]);
+    const [[building]] = await pool.execute(
+      `
+        SELECT
+          b.id,
+          (SELECT COUNT(*) FROM apartments a WHERE a.building_id = b.id) AS apartmentCount
+        FROM buildings b
+        WHERE b.id = ?
+      `,
+      [asset.buildingId]
+    );
     if (!building) {
       throw createError("Das ausgewählte Gebäude existiert nicht.", 400);
+    }
+    if (building.apartmentCount > 0) {
+      throw createError("Gebäude mit Appartments können nicht direkt als Zuordnung genutzt werden. Bitte ein Appartment auswählen.", 400);
     }
   }
 

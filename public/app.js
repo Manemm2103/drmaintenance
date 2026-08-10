@@ -958,13 +958,15 @@ function renderAssetAssignmentOptions(properties) {
   const options = [];
 
   for (const building of properties || []) {
-    options.push(
-      `<option value="building:${building.id}">${escapeHtml(building.name)}${building.customerNumber ? ` - ${escapeHtml(building.customerNumber)}` : ""}</option>`
-    );
-
-    for (const apartment of building.apartments || []) {
+    if (building.apartments?.length > 0) {
+      for (const apartment of building.apartments) {
+        options.push(
+          `<option value="apartment:${apartment.id}">${escapeHtml(building.name)} / ${escapeHtml(apartment.name)}${apartment.customerNumber ? ` - ${escapeHtml(apartment.customerNumber)}` : ""}</option>`
+        );
+      }
+    } else {
       options.push(
-        `<option value="apartment:${apartment.id}">${escapeHtml(building.name)} / ${escapeHtml(apartment.name)}${apartment.customerNumber ? ` - ${escapeHtml(apartment.customerNumber)}` : ""}</option>`
+        `<option value="building:${building.id}">${escapeHtml(building.name)}${building.customerNumber ? ` - ${escapeHtml(building.customerNumber)}` : ""}</option>`
       );
     }
   }
@@ -976,7 +978,7 @@ function renderAssetAssignmentOptions(properties) {
 
 function renderMaintenanceTargetOptions(targets) {
   const currentValue = els.maintenanceTargetSelect.value;
-  els.maintenanceTargetSelect.innerHTML = '<option value="">Wartungsobjekt auswählen</option>' + targets.map((target) => (
+  els.maintenanceTargetSelect.innerHTML = '<option value="">Wartungsziel auswählen</option>' + targets.map((target) => (
     `<option value="${target.targetType}:${target.targetId}">${escapeHtml(target.label)} - ${escapeHtml(target.subtitle || "")}</option>`
   )).join("");
   els.maintenanceTargetSelect.value = currentValue;
@@ -1590,7 +1592,7 @@ function bindEvents() {
 
   els.maintenanceForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!validateSearchableSelect(els.maintenanceTargetSelect, "Bitte ein Wartungsobjekt aus der Liste auswählen.")) {
+    if (!validateSearchableSelect(els.maintenanceTargetSelect, "Bitte ein Wartungsziel aus der Liste auswählen.")) {
       return;
     }
 
