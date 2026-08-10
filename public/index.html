@@ -21,13 +21,13 @@
         <nav class="nav">
           <a href="#dashboard" class="active" data-view-link="dashboard" data-nav-key="dashboard">Dashboard</a>
           <a href="#kalender" data-view-link="dashboard" data-nav-key="kalender" data-scroll-target="kalender">Kalender</a>
-          <a href="#stammdaten" data-view-link="stammdaten">Stammdaten</a>
           <a href="#kunden" data-view-link="kunden">Kunden</a>
           <a href="#wartungsobjekte" data-view-link="wartungsobjekte">Objekte</a>
           <a href="#gebaeude" data-view-link="gebaeude">Gebäude</a>
           <a href="#planung" data-view-link="planung">Wartungspläne</a>
           <a href="#mitarbeiter" data-view-link="mitarbeiter">Mitarbeiter</a>
           <a href="#benutzer" data-view-link="benutzer">Benutzer</a>
+          <a href="#stammdaten" data-view-link="stammdaten">Stammdaten</a>
         </nav>
 
         <div class="sidebar-footer">
@@ -116,8 +116,12 @@
             </div>
             <form id="appSettingsForm" class="form-grid compact-form">
               <label class="check-row span-2">
-                <input name="skipWeekendsForMaintenance" id="skipWeekendsForMaintenanceInput" type="checkbox">
-                Sa. &amp; So. nicht als Arbeitstage im Wartungsplan berücksichtigen
+                <input name="skipSaturdaysForMaintenance" id="skipSaturdaysForMaintenanceInput" type="checkbox">
+                Samstag nicht als Arbeitstag im Wartungsplan berücksichtigen
+              </label>
+              <label class="check-row span-2">
+                <input name="skipSundaysForMaintenance" id="skipSundaysForMaintenanceInput" type="checkbox">
+                Sonntag nicht als Arbeitstag im Wartungsplan berücksichtigen
               </label>
               <button class="primary-button span-2" type="submit">Stammdaten speichern</button>
             </form>

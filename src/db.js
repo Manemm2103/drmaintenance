@@ -285,6 +285,19 @@ async function runMigrations() {
     "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)",
     ["skip_weekends_for_maintenance", "0"]
   );
+  const [[weekendSetting]] = await pool.execute(
+    "SELECT setting_value AS settingValue FROM app_settings WHERE setting_key = ?",
+    ["skip_weekends_for_maintenance"]
+  );
+  const weekendDefault = weekendSetting?.settingValue || "0";
+  await pool.execute(
+    "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)",
+    ["skip_saturdays_for_maintenance", weekendDefault]
+  );
+  await pool.execute(
+    "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)",
+    ["skip_sundays_for_maintenance", weekendDefault]
+  );
 
   await seedSystemAdmin();
   await cleanupExpiredSessions();
@@ -636,7 +649,7 @@ async function getDashboardSummary() {
     ORDER BY mp.next_due_on ASC
   `);
   const visiblePlans = plans.map((plan) => {
-    const nextDueOn = adjustDateKeyForWeekend(plan.nextDueOn, settings.skipWeekendsForMaintenance);
+    const nextDueOn = adjustDateKeyForWeekend(plan.nextDueOn, settings);
     return {
       ...plan,
       rawNextDueOn: plan.nextDueOn,
@@ -749,23 +762,48 @@ function settingToBoolean(value) {
 async function getAppSettings() {
   const [rows] = await pool.query("SELECT setting_key AS settingKey, setting_value AS settingValue FROM app_settings");
   const settings = Object.fromEntries(rows.map((row) => [row.settingKey, row.settingValue]));
+  const legacyWeekendSetting = settingToBoolean(settings.skip_weekends_for_maintenance);
+  const skipSaturdaysForMaintenance = settings.skip_saturdays_for_maintenance === undefined
+    ? legacyWeekendSetting
+    : settingToBoolean(settings.skip_saturdays_for_maintenance);
+  const skipSundaysForMaintenance = settings.skip_sundays_for_maintenance === undefined
+    ? legacyWeekendSetting
+    : settingToBoolean(settings.skip_sundays_for_maintenance);
 
   return {
-    skipWeekendsForMaintenance: settingToBoolean(settings.skip_weekends_for_maintenance)
+    skipSaturdaysForMaintenance,
+    skipSundaysForMaintenance,
+    skipWeekendsForMaintenance: skipSaturdaysForMaintenance && skipSundaysForMaintenance
   };
 }
 
 async function updateAppSettings(input) {
-  const skipWeekendsForMaintenance = parseBoolean(input.skipWeekendsForMaintenance);
+  const currentSettings = await getAppSettings();
+  const legacyWeekendInput = input.skipWeekendsForMaintenance;
+  const skipSaturdaysForMaintenance = input.skipSaturdaysForMaintenance === undefined
+    ? (legacyWeekendInput === undefined ? currentSettings.skipSaturdaysForMaintenance : parseBoolean(legacyWeekendInput))
+    : parseBoolean(input.skipSaturdaysForMaintenance);
+  const skipSundaysForMaintenance = input.skipSundaysForMaintenance === undefined
+    ? (legacyWeekendInput === undefined ? currentSettings.skipSundaysForMaintenance : parseBoolean(legacyWeekendInput))
+    : parseBoolean(input.skipSundaysForMaintenance);
+  const skipWeekendsForMaintenance = skipSaturdaysForMaintenance && skipSundaysForMaintenance;
 
-  await pool.execute(
-    `
-      INSERT INTO app_settings (setting_key, setting_value)
-      VALUES (?, ?)
-      ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
-    `,
-    ["skip_weekends_for_maintenance", skipWeekendsForMaintenance ? "1" : "0"]
-  );
+  const settingsToSave = [
+    ["skip_saturdays_for_maintenance", skipSaturdaysForMaintenance],
+    ["skip_sundays_for_maintenance", skipSundaysForMaintenance],
+    ["skip_weekends_for_maintenance", skipWeekendsForMaintenance]
+  ];
+
+  for (const [settingKey, settingValue] of settingsToSave) {
+    await pool.execute(
+      `
+        INSERT INTO app_settings (setting_key, setting_value)
+        VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+      `,
+      [settingKey, settingValue ? "1" : "0"]
+    );
+  }
 
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('settings', 0, ?)",
@@ -2044,7 +2082,7 @@ async function createMaintenancePlan(input) {
   await assertEmployeeExists(employeeId);
 
   const settings = await getAppSettings();
-  const nextDueOn = adjustDateKeyForWeekend(input.nextDueOn, settings.skipWeekendsForMaintenance);
+  const nextDueOn = adjustDateKeyForWeekend(input.nextDueOn, settings);
   const assetId = targetType === "asset" ? targetId : null;
   const [result] = await pool.execute(
     `
@@ -2135,25 +2173,22 @@ function addDays(date, days) {
   return nextDate;
 }
 
-function adjustDateForWeekend(date, skipWeekends) {
-  if (!skipWeekends) {
-    return date;
-  }
-
+function isSkippedMaintenanceWeekday(date, settings) {
   const day = date.getUTCDay();
-  if (day === 6) {
-    return addDays(date, 2);
-  }
-
-  if (day === 0) {
-    return addDays(date, 1);
-  }
-
-  return date;
+  return (day === 6 && settings.skipSaturdaysForMaintenance)
+    || (day === 0 && settings.skipSundaysForMaintenance);
 }
 
-function adjustDateKeyForWeekend(value, skipWeekends) {
-  return formatDateKey(adjustDateForWeekend(parseDateKey(value), skipWeekends));
+function adjustDateForWeekend(date, settings) {
+  let adjustedDate = date;
+  while (isSkippedMaintenanceWeekday(adjustedDate, settings)) {
+    adjustedDate = addDays(adjustedDate, 1);
+  }
+  return adjustedDate;
+}
+
+function adjustDateKeyForWeekend(value, settings) {
+  return formatDateKey(adjustDateForWeekend(parseDateKey(value), settings));
 }
 
 function daysBetween(start, end) {
@@ -2198,7 +2233,9 @@ async function getCalendarEvents(startDate, endDate) {
 
   const rangeStart = parseDateKey(startDate);
   const rangeEnd = parseDateKey(endDate);
-  const rawRangeStart = settings.skipWeekendsForMaintenance ? addDays(rangeStart, -2) : rangeStart;
+  const rawRangeStart = settings.skipSaturdaysForMaintenance || settings.skipSundaysForMaintenance
+    ? addDays(rangeStart, -2)
+    : rangeStart;
   const events = [];
 
   for (const row of rows) {
@@ -2216,7 +2253,7 @@ async function getCalendarEvents(startDate, endDate) {
     let occurrenceIndex = 0;
     while (dueDate <= rangeEnd) {
       const rawDueDateKey = formatDateKey(dueDate);
-      const visibleDueDate = adjustDateForWeekend(dueDate, settings.skipWeekendsForMaintenance);
+      const visibleDueDate = adjustDateForWeekend(dueDate, settings);
       const visibleDueDateKey = formatDateKey(visibleDueDate);
       if (visibleDueDate >= rangeStart && visibleDueDate <= rangeEnd) {
         events.push({

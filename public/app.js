@@ -67,7 +67,8 @@ const els = {
   employeeNewButton: document.querySelector("#employeeNewButton"),
   employeeActiveInput: document.querySelector("#employeeActiveInput"),
   appSettingsForm: document.querySelector("#appSettingsForm"),
-  skipWeekendsForMaintenanceInput: document.querySelector("#skipWeekendsForMaintenanceInput"),
+  skipSaturdaysForMaintenanceInput: document.querySelector("#skipSaturdaysForMaintenanceInput"),
+  skipSundaysForMaintenanceInput: document.querySelector("#skipSundaysForMaintenanceInput"),
   userForm: document.querySelector("#userForm"),
   toast: document.querySelector("#toast")
 };
@@ -599,7 +600,8 @@ function renderSummary(payload) {
 }
 
 function renderAppSettings(settings) {
-  els.skipWeekendsForMaintenanceInput.checked = Boolean(settings?.skipWeekendsForMaintenance);
+  els.skipSaturdaysForMaintenanceInput.checked = Boolean(settings?.skipSaturdaysForMaintenance);
+  els.skipSundaysForMaintenanceInput.checked = Boolean(settings?.skipSundaysForMaintenance);
 }
 
 function renderWorkOrders(workOrders) {
@@ -1790,7 +1792,8 @@ function bindEvents() {
     await api("/api/settings", {
       method: "PATCH",
       body: JSON.stringify({
-        skipWeekendsForMaintenance: els.skipWeekendsForMaintenanceInput.checked
+        skipSaturdaysForMaintenance: els.skipSaturdaysForMaintenanceInput.checked,
+        skipSundaysForMaintenance: els.skipSundaysForMaintenanceInput.checked
       })
     });
 
