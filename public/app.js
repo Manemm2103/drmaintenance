@@ -66,6 +66,8 @@ const els = {
   employeeSubmitButton: document.querySelector("#employeeSubmitButton"),
   employeeNewButton: document.querySelector("#employeeNewButton"),
   employeeActiveInput: document.querySelector("#employeeActiveInput"),
+  appSettingsForm: document.querySelector("#appSettingsForm"),
+  skipWeekendsForMaintenanceInput: document.querySelector("#skipWeekendsForMaintenanceInput"),
   userForm: document.querySelector("#userForm"),
   toast: document.querySelector("#toast")
 };
@@ -106,6 +108,14 @@ const viewConfig = {
     actionTitle: "Neuen Wartungsplan erfassen",
     actionView: "planung",
     scrollTarget: "new-maintenance"
+  },
+  stammdaten: {
+    eyebrow: "Stammdaten",
+    title: "Globale Einstellungen verwalten.",
+    actionLabel: "Stammdaten",
+    actionTitle: "Stammdaten bearbeiten",
+    actionView: "stammdaten",
+    scrollTarget: "appSettingsForm"
   },
   kunden: {
     eyebrow: "Stammdaten",
@@ -162,6 +172,7 @@ const hashViewMap = {
   kalender: "dashboard",
   auftraege: "dashboard",
   "new-work-order": "dashboard",
+  stammdaten: "stammdaten",
   kunden: "kunden",
   wartungsobjekte: "wartungsobjekte",
   gebaeude: "gebaeude",
@@ -562,7 +573,7 @@ async function loadCurrentUser() {
 }
 
 function renderSummary(payload) {
-  const { summary, workOrders, assets, plans, activity, customers, employees, users } = payload;
+  const { summary, workOrders, assets, plans, activity, customers, employees, settings, users } = payload;
   latestAssets = assets || [];
   latestCustomers = customers || [];
   latestEmployees = employees || [];
@@ -584,6 +595,11 @@ function renderSummary(payload) {
   renderCustomerOptions(customers);
   renderAssetOptions(assets);
   renderEmployeeOptions(employees);
+  renderAppSettings(settings);
+}
+
+function renderAppSettings(settings) {
+  els.skipWeekendsForMaintenanceInput.checked = Boolean(settings?.skipWeekendsForMaintenance);
 }
 
 function renderWorkOrders(workOrders) {
@@ -1767,6 +1783,20 @@ function bindEvents() {
   });
 
   els.employeeNewButton.addEventListener("click", resetEmployeeForm);
+
+  els.appSettingsForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+
+    await api("/api/settings", {
+      method: "PATCH",
+      body: JSON.stringify({
+        skipWeekendsForMaintenance: els.skipWeekendsForMaintenanceInput.checked
+      })
+    });
+
+    showToast("Stammdaten gespeichert.");
+    await loadDashboard();
+  });
 
   els.userForm.addEventListener("submit", async (event) => {
     event.preventDefault();

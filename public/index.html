@@ -21,6 +21,7 @@
         <nav class="nav">
           <a href="#dashboard" class="active" data-view-link="dashboard" data-nav-key="dashboard">Dashboard</a>
           <a href="#kalender" data-view-link="dashboard" data-nav-key="kalender" data-scroll-target="kalender">Kalender</a>
+          <a href="#stammdaten" data-view-link="stammdaten">Stammdaten</a>
           <a href="#kunden" data-view-link="kunden">Kunden</a>
           <a href="#wartungsobjekte" data-view-link="wartungsobjekte">Objekte</a>
           <a href="#gebaeude" data-view-link="gebaeude">Gebäude</a>
@@ -101,6 +102,26 @@
             <div class="calendar-grid" id="calendarGrid" aria-label="Wartungskalender"></div>
           </article>
 
+          </section>
+        </section>
+
+        <section class="view" data-view="stammdaten">
+          <section class="workspace-grid single-view-grid">
+          <article class="panel wide" id="stammdaten">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Stammdaten</p>
+                <h2>Einstellungen</h2>
+              </div>
+            </div>
+            <form id="appSettingsForm" class="form-grid compact-form">
+              <label class="check-row span-2">
+                <input name="skipWeekendsForMaintenance" id="skipWeekendsForMaintenanceInput" type="checkbox">
+                Sa. &amp; So. nicht als Arbeitstage im Wartungsplan berücksichtigen
+              </label>
+              <button class="primary-button span-2" type="submit">Stammdaten speichern</button>
+            </form>
+          </article>
           </section>
         </section>
 

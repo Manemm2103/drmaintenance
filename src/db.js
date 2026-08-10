@@ -273,6 +273,19 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS app_settings (
+      setting_key VARCHAR(80) PRIMARY KEY,
+      setting_value VARCHAR(255) NOT NULL,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.execute(
+    "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)",
+    ["skip_weekends_for_maintenance", "0"]
+  );
+
   await seedSystemAdmin();
   await cleanupExpiredSessions();
   await seedPropertyData();
@@ -557,6 +570,7 @@ async function normalizeGermanText() {
 }
 
 async function getDashboardSummary() {
+  const settings = await getAppSettings();
   const [[summary]] = await pool.query(`
     SELECT
       (SELECT COUNT(*) FROM assets) AS assetCount,
@@ -621,6 +635,15 @@ async function getDashboardSummary() {
     WHERE mp.active = TRUE
     ORDER BY mp.next_due_on ASC
   `);
+  const visiblePlans = plans.map((plan) => {
+    const nextDueOn = adjustDateKeyForWeekend(plan.nextDueOn, settings.skipWeekendsForMaintenance);
+    return {
+      ...plan,
+      rawNextDueOn: plan.nextDueOn,
+      nextDueOn,
+      weekendAdjusted: nextDueOn !== plan.nextDueOn
+    };
+  });
 
   const [assets] = await pool.query(`
     SELECT
@@ -679,11 +702,12 @@ async function getDashboardSummary() {
   return {
     summary,
     workOrders,
-    plans,
+    plans: visiblePlans,
     assets,
     activity,
     customers,
     employees,
+    settings,
     users
   };
 }
@@ -716,6 +740,39 @@ function handleDuplicateUser(error) {
   }
 
   throw error;
+}
+
+function settingToBoolean(value) {
+  return value === true || value === 1 || value === "1" || value === "true" || value === "on";
+}
+
+async function getAppSettings() {
+  const [rows] = await pool.query("SELECT setting_key AS settingKey, setting_value AS settingValue FROM app_settings");
+  const settings = Object.fromEntries(rows.map((row) => [row.settingKey, row.settingValue]));
+
+  return {
+    skipWeekendsForMaintenance: settingToBoolean(settings.skip_weekends_for_maintenance)
+  };
+}
+
+async function updateAppSettings(input) {
+  const skipWeekendsForMaintenance = parseBoolean(input.skipWeekendsForMaintenance);
+
+  await pool.execute(
+    `
+      INSERT INTO app_settings (setting_key, setting_value)
+      VALUES (?, ?)
+      ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+    `,
+    ["skip_weekends_for_maintenance", skipWeekendsForMaintenance ? "1" : "0"]
+  );
+
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('settings', 0, ?)",
+    ["Stammdaten aktualisiert."]
+  );
+
+  return getAppSettings();
 }
 
 async function authenticateUser(username, password) {
@@ -1986,6 +2043,8 @@ async function createMaintenancePlan(input) {
   await assertMaintenanceTarget(targetType, targetId);
   await assertEmployeeExists(employeeId);
 
+  const settings = await getAppSettings();
+  const nextDueOn = adjustDateKeyForWeekend(input.nextDueOn, settings.skipWeekendsForMaintenance);
   const assetId = targetType === "asset" ? targetId : null;
   const [result] = await pool.execute(
     `
@@ -2000,7 +2059,7 @@ async function createMaintenancePlan(input) {
       title,
       intervalDays,
       input.lastDoneOn || null,
-      input.nextDueOn
+      nextDueOn
     ]
   );
 
@@ -2076,11 +2135,33 @@ function addDays(date, days) {
   return nextDate;
 }
 
+function adjustDateForWeekend(date, skipWeekends) {
+  if (!skipWeekends) {
+    return date;
+  }
+
+  const day = date.getUTCDay();
+  if (day === 6) {
+    return addDays(date, 2);
+  }
+
+  if (day === 0) {
+    return addDays(date, 1);
+  }
+
+  return date;
+}
+
+function adjustDateKeyForWeekend(value, skipWeekends) {
+  return formatDateKey(adjustDateForWeekend(parseDateKey(value), skipWeekends));
+}
+
 function daysBetween(start, end) {
   return Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
 }
 
 async function getCalendarEvents(startDate, endDate) {
+  const settings = await getAppSettings();
   const [rows] = await pool.execute(
     `
       SELECT
@@ -2117,30 +2198,35 @@ async function getCalendarEvents(startDate, endDate) {
 
   const rangeStart = parseDateKey(startDate);
   const rangeEnd = parseDateKey(endDate);
+  const rawRangeStart = settings.skipWeekendsForMaintenance ? addDays(rangeStart, -2) : rangeStart;
   const events = [];
 
   for (const row of rows) {
     const intervalDays = Number(row.intervalDays);
     let dueDate = parseDateKey(row.dueDate);
 
-    if (intervalDays > 0 && dueDate < rangeStart) {
-      const missedIntervals = Math.floor(daysBetween(dueDate, rangeStart) / intervalDays);
+    if (intervalDays > 0 && dueDate < rawRangeStart) {
+      const missedIntervals = Math.floor(daysBetween(dueDate, rawRangeStart) / intervalDays);
       dueDate = addDays(dueDate, missedIntervals * intervalDays);
-      while (dueDate < rangeStart) {
+      while (dueDate < rawRangeStart) {
         dueDate = addDays(dueDate, intervalDays);
       }
     }
 
     let occurrenceIndex = 0;
     while (dueDate <= rangeEnd) {
-      const dueDateKey = formatDateKey(dueDate);
-      if (dueDate >= rangeStart) {
+      const rawDueDateKey = formatDateKey(dueDate);
+      const visibleDueDate = adjustDateForWeekend(dueDate, settings.skipWeekendsForMaintenance);
+      const visibleDueDateKey = formatDateKey(visibleDueDate);
+      if (visibleDueDate >= rangeStart && visibleDueDate <= rangeEnd) {
         events.push({
           ...row,
-          id: `${row.id}:${dueDateKey}`,
+          id: `${row.id}:${visibleDueDateKey}:${occurrenceIndex}`,
           planId: row.id,
-          dueDate: dueDateKey,
-          generated: dueDateKey !== row.dueDate,
+          rawDueDate: rawDueDateKey,
+          dueDate: visibleDueDateKey,
+          generated: rawDueDateKey !== row.dueDate || visibleDueDateKey !== rawDueDateKey,
+          weekendAdjusted: visibleDueDateKey !== rawDueDateKey,
           occurrenceIndex
         });
       }
@@ -2522,6 +2608,8 @@ module.exports = {
   waitForDatabase,
   runMigrations,
   getDashboardSummary,
+  getAppSettings,
+  updateAppSettings,
   authenticateUser,
   createSession,
   getUserBySessionToken,

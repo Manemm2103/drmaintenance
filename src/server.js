@@ -208,6 +208,14 @@ app.get("/api/summary", asyncRoute(async (_req, res) => {
   res.json(await db.getDashboardSummary());
 }));
 
+app.get("/api/settings", asyncRoute(async (_req, res) => {
+  res.json(await db.getAppSettings());
+}));
+
+app.patch("/api/settings", asyncRoute(async (req, res) => {
+  res.json(await db.updateAppSettings(req.body));
+}));
+
 app.get("/api/users", asyncRoute(async (_req, res) => {
   res.json(await db.listUsers());
 }));

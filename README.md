@@ -57,6 +57,8 @@ Die Wartungsobjektliste kann nach Freitext, Kunde, Straße/Adresse und Kritikali
 - `POST /api/auth/login`
 - `POST /api/auth/logout`
 - `GET /api/auth/me`
+- `GET /api/settings`
+- `PATCH /api/settings`
 - `GET /api/summary`
 - `GET /api/calendar`
 - `GET /api/customers`
@@ -91,7 +93,7 @@ Die Wartungsobjektliste kann nach Freitext, Kunde, Straße/Adresse und Kritikali
 
 ## Versionierung
 
-Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.10.07`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
+Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.10.08`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
 
 ## Nächste sinnvolle Schritte
 
