@@ -101,6 +101,16 @@ const buildingTypeLabels = {
   other: "Sonstiges"
 };
 
+const maintenanceWeekdayFields = [
+  { key: "maintenanceMonday", label: "Mo", defaultValue: true },
+  { key: "maintenanceTuesday", label: "Di", defaultValue: true },
+  { key: "maintenanceWednesday", label: "Mi", defaultValue: true },
+  { key: "maintenanceThursday", label: "Do", defaultValue: true },
+  { key: "maintenanceFriday", label: "Fr", defaultValue: true },
+  { key: "maintenanceSaturday", label: "Sa", defaultValue: true },
+  { key: "maintenanceSunday", label: "So", defaultValue: false }
+];
+
 const viewConfig = {
   dashboard: {
     eyebrow: "Wartungsplaner",
@@ -814,6 +824,13 @@ function formatCustomerLabel(customerNumber, customerName) {
   return [customerNumber, customerName].filter(Boolean).join(" - ");
 }
 
+function formatMaintenanceWeekdays(source) {
+  const activeDays = maintenanceWeekdayFields
+    .filter((field) => Number(source?.[field.key]) === 1 || source?.[field.key] === true)
+    .map((field) => field.label);
+  return activeDays.length > 0 ? activeDays.join(", ") : "Keine Wunschtage";
+}
+
 function formatAddressLabel(street, houseNumber, postalCode, city) {
   const streetLine = [street, houseNumber].filter(Boolean).join(" ");
   const cityLine = [postalCode, city].filter(Boolean).join(" ");
@@ -833,6 +850,7 @@ function renderCustomers(customers) {
         <div class="list-meta">
           <span>${escapeHtml(customer.customerNumber)}</span>
           <span>${escapeHtml(formatAddressLabel(customer.street, customer.houseNumber, customer.postalCode, customer.city) || "Keine Adresse")}</span>
+          <span>Wartung: ${escapeHtml(formatMaintenanceWeekdays(customer))}</span>
           ${Number(customer.billingAddressDiffers) === 1 ? `<span>RE: ${escapeHtml(formatAddressLabel(customer.billingStreet, customer.billingHouseNumber, customer.billingPostalCode, customer.billingCity))}</span>` : ""}
           <span>${escapeHtml(customer.contactName || "Kein Ansprechpartner")}</span>
           <span>${escapeHtml(customer.email || "Keine E-Mail")}</span>
@@ -1060,6 +1078,22 @@ function duplicateAssetInForm(asset) {
   els.assetSubmitButton.textContent = "Kopie speichern";
 }
 
+function getCustomerMaintenanceWeekdayPayload() {
+  return Object.fromEntries(maintenanceWeekdayFields.map((field) => [
+    field.key,
+    Boolean(els.customerForm.elements[field.key]?.checked)
+  ]));
+}
+
+function applyCustomerMaintenanceWeekdays(source = {}) {
+  maintenanceWeekdayFields.forEach((field) => {
+    const input = els.customerForm.elements[field.key];
+    if (input) {
+      input.checked = source[field.key] === undefined ? field.defaultValue : Boolean(Number(source[field.key]));
+    }
+  });
+}
+
 function getCustomerFormPayload() {
   const data = Object.fromEntries(new FormData(els.customerForm));
   return {
@@ -1080,6 +1114,7 @@ function getCustomerFormPayload() {
     billingHouseNumber: data.billingHouseNumber,
     billingPostalCode: data.billingPostalCode,
     billingCity: data.billingCity,
+    ...getCustomerMaintenanceWeekdayPayload(),
     notes: data.notes
   };
 }
@@ -1098,6 +1133,7 @@ function syncBillingAddressFields() {
 function resetCustomerForm() {
   els.customerForm.reset();
   els.customerIdInput.value = "";
+  applyCustomerMaintenanceWeekdays();
   syncBillingAddressFields();
   els.customerSubmitButton.textContent = "Kunde speichern";
 }
@@ -1121,6 +1157,7 @@ function loadCustomerIntoForm(customer) {
   els.customerForm.elements.billingHouseNumber.value = customer.billingHouseNumber || "";
   els.customerForm.elements.billingPostalCode.value = customer.billingPostalCode || "";
   els.customerForm.elements.billingCity.value = customer.billingCity || "";
+  applyCustomerMaintenanceWeekdays(customer);
   els.customerForm.elements.notes.value = customer.notes || "";
   els.customerSubmitButton.textContent = "Änderungen speichern";
   setView("kunden", { updateHash: true, scrollTop: false });
@@ -1692,6 +1729,13 @@ function bindEvents() {
         billingHouseNumber: data.billingHouseNumber,
         billingPostalCode: data.billingPostalCode,
         billingCity: data.billingCity,
+        maintenanceMonday: data.maintenanceMonday,
+        maintenanceTuesday: data.maintenanceTuesday,
+        maintenanceWednesday: data.maintenanceWednesday,
+        maintenanceThursday: data.maintenanceThursday,
+        maintenanceFriday: data.maintenanceFriday,
+        maintenanceSaturday: data.maintenanceSaturday,
+        maintenanceSunday: data.maintenanceSunday,
         notes: data.notes
       })
     });

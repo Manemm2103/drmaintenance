@@ -17,6 +17,15 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const allowedRoles = new Set(["admin", "manager", "technician", "viewer"]);
 const regularSessionMs = 12 * 60 * 60 * 1000;
 const rememberSessionMs = 60 * 24 * 60 * 60 * 1000;
+const customerMaintenanceWeekdayFields = [
+  { key: "maintenanceMonday", column: "maintenance_monday", day: 1, defaultValue: true },
+  { key: "maintenanceTuesday", column: "maintenance_tuesday", day: 2, defaultValue: true },
+  { key: "maintenanceWednesday", column: "maintenance_wednesday", day: 3, defaultValue: true },
+  { key: "maintenanceThursday", column: "maintenance_thursday", day: 4, defaultValue: true },
+  { key: "maintenanceFriday", column: "maintenance_friday", day: 5, defaultValue: true },
+  { key: "maintenanceSaturday", column: "maintenance_saturday", day: 6, defaultValue: true },
+  { key: "maintenanceSunday", column: "maintenance_sunday", day: 0, defaultValue: false }
+];
 
 async function waitForDatabase(maxAttempts = 45) {
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -55,6 +64,13 @@ async function runMigrations() {
       billing_postal_code VARCHAR(20) NULL,
       billing_city VARCHAR(120) NULL,
       billing_address VARCHAR(240) NULL,
+      maintenance_monday BOOLEAN NOT NULL DEFAULT TRUE,
+      maintenance_tuesday BOOLEAN NOT NULL DEFAULT TRUE,
+      maintenance_wednesday BOOLEAN NOT NULL DEFAULT TRUE,
+      maintenance_thursday BOOLEAN NOT NULL DEFAULT TRUE,
+      maintenance_friday BOOLEAN NOT NULL DEFAULT TRUE,
+      maintenance_saturday BOOLEAN NOT NULL DEFAULT TRUE,
+      maintenance_sunday BOOLEAN NOT NULL DEFAULT FALSE,
       notes TEXT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -75,6 +91,13 @@ async function runMigrations() {
   await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_house_number VARCHAR(40) NULL AFTER billing_street");
   await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_postal_code VARCHAR(20) NULL AFTER billing_house_number");
   await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_city VARCHAR(120) NULL AFTER billing_postal_code");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS maintenance_monday BOOLEAN NOT NULL DEFAULT TRUE AFTER billing_address");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS maintenance_tuesday BOOLEAN NOT NULL DEFAULT TRUE AFTER maintenance_monday");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS maintenance_wednesday BOOLEAN NOT NULL DEFAULT TRUE AFTER maintenance_tuesday");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS maintenance_thursday BOOLEAN NOT NULL DEFAULT TRUE AFTER maintenance_wednesday");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS maintenance_friday BOOLEAN NOT NULL DEFAULT TRUE AFTER maintenance_thursday");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS maintenance_saturday BOOLEAN NOT NULL DEFAULT TRUE AFTER maintenance_friday");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS maintenance_sunday BOOLEAN NOT NULL DEFAULT FALSE AFTER maintenance_saturday");
   await pool.query(`
     UPDATE customers
     SET
@@ -615,6 +638,7 @@ async function getDashboardSummary() {
   const [plans] = await pool.query(`
     SELECT
       mp.id,
+      mp.asset_id AS assetId,
       mp.title,
       mp.interval_days AS intervalDays,
       DATE_FORMAT(mp.next_due_on, '%Y-%m-%d') AS nextDueOn,
@@ -648,15 +672,23 @@ async function getDashboardSummary() {
     WHERE mp.active = TRUE
     ORDER BY mp.next_due_on ASC
   `);
-  const visiblePlans = plans.map((plan) => {
-    const nextDueOn = adjustDateKeyForWeekend(plan.nextDueOn, settings);
+  const visiblePlans = await Promise.all(plans.map(async (plan) => {
+    const customerWeekdays = await getCustomerMaintenanceWeekdaysForTarget(
+      plan.targetType || "asset",
+      plan.targetId || plan.assetId
+    );
+    const nextDueOn = adjustDateKeyForWeekend(plan.nextDueOn, settings, customerWeekdays);
     return {
       ...plan,
       rawNextDueOn: plan.nextDueOn,
       nextDueOn,
       weekendAdjusted: nextDueOn !== plan.nextDueOn
     };
-  });
+  }));
+  visiblePlans.sort((left, right) => (
+    left.nextDueOn.localeCompare(right.nextDueOn)
+    || left.title.localeCompare(right.title, "de")
+  ));
 
   const [assets] = await pool.query(`
     SELECT
@@ -1276,6 +1308,13 @@ async function listCustomers() {
       billing_postal_code AS billingPostalCode,
       billing_city AS billingCity,
       billing_address AS billingAddress,
+      maintenance_monday AS maintenanceMonday,
+      maintenance_tuesday AS maintenanceTuesday,
+      maintenance_wednesday AS maintenanceWednesday,
+      maintenance_thursday AS maintenanceThursday,
+      maintenance_friday AS maintenanceFriday,
+      maintenance_saturday AS maintenanceSaturday,
+      maintenance_sunday AS maintenanceSunday,
       notes
     FROM customers
     ORDER BY customer_number ASC, name ASC
@@ -1299,6 +1338,23 @@ function normalizeText(value) {
 
 function parseBoolean(value) {
   return value === true || value === 1 || value === "1" || value === "true" || value === "on";
+}
+
+function normalizeCustomerMaintenanceWeekdays(input, existingCustomer = null) {
+  const weekdays = {};
+
+  for (const field of customerMaintenanceWeekdayFields) {
+    const existingValue = existingCustomer?.[field.key];
+    weekdays[field.key] = input[field.key] === undefined
+      ? (existingValue === undefined ? field.defaultValue : parseBoolean(existingValue))
+      : parseBoolean(input[field.key]);
+  }
+
+  if (!Object.values(weekdays).some(Boolean)) {
+    throw createError("Mindestens ein Wunsch-Wartungstag muss aktiv sein.", 400);
+  }
+
+  return weekdays;
 }
 
 function splitLegacyCustomerName(value) {
@@ -1354,6 +1410,7 @@ async function normalizeCustomerInput(input, existingCustomer = null) {
   const billingHouseNumber = billingAddressDiffers ? normalizeText(input.billingHouseNumber) : null;
   const billingPostalCode = billingAddressDiffers ? normalizeText(input.billingPostalCode) : null;
   const billingCity = billingAddressDiffers ? normalizeText(input.billingCity) : null;
+  const maintenanceWeekdays = normalizeCustomerMaintenanceWeekdays(input, existingCustomer);
 
   if (billingAddressDiffers && (!billingRecipient || !billingStreet || !billingHouseNumber || !billingPostalCode || !billingCity)) {
     throw createError("Bei abweichender Rechnungsadresse sind Empfänger, Straße, Hausnummer, PLZ und Ort Pflichtfelder.", 400);
@@ -1380,6 +1437,7 @@ async function normalizeCustomerInput(input, existingCustomer = null) {
     billingAddress: billingAddressDiffers
       ? combineAddress(billingStreet, billingHouseNumber, billingPostalCode, billingCity)
       : combineAddress(street, houseNumber, postalCode, city),
+    ...maintenanceWeekdays,
     notes: normalizeText(input.notes)
   };
 }
@@ -1428,9 +1486,16 @@ async function createCustomer(input) {
           billing_postal_code,
           billing_city,
           billing_address,
+          maintenance_monday,
+          maintenance_tuesday,
+          maintenance_wednesday,
+          maintenance_thursday,
+          maintenance_friday,
+          maintenance_saturday,
+          maintenance_sunday,
           notes
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         customer.customerNumber,
@@ -1451,6 +1516,13 @@ async function createCustomer(input) {
         customer.billingPostalCode,
         customer.billingCity,
         customer.billingAddress,
+        customer.maintenanceMonday,
+        customer.maintenanceTuesday,
+        customer.maintenanceWednesday,
+        customer.maintenanceThursday,
+        customer.maintenanceFriday,
+        customer.maintenanceSaturday,
+        customer.maintenanceSunday,
         customer.notes
       ]
     );
@@ -1489,6 +1561,13 @@ async function getCustomerById(id) {
         billing_postal_code AS billingPostalCode,
         billing_city AS billingCity,
         billing_address AS billingAddress,
+        maintenance_monday AS maintenanceMonday,
+        maintenance_tuesday AS maintenanceTuesday,
+        maintenance_wednesday AS maintenanceWednesday,
+        maintenance_thursday AS maintenanceThursday,
+        maintenance_friday AS maintenanceFriday,
+        maintenance_saturday AS maintenanceSaturday,
+        maintenance_sunday AS maintenanceSunday,
         notes
       FROM customers
       WHERE id = ?
@@ -1529,6 +1608,13 @@ async function updateCustomer(id, input) {
           billing_postal_code = ?,
           billing_city = ?,
           billing_address = ?,
+          maintenance_monday = ?,
+          maintenance_tuesday = ?,
+          maintenance_wednesday = ?,
+          maintenance_thursday = ?,
+          maintenance_friday = ?,
+          maintenance_saturday = ?,
+          maintenance_sunday = ?,
           notes = ?
         WHERE id = ?
       `,
@@ -1551,6 +1637,13 @@ async function updateCustomer(id, input) {
         customer.billingPostalCode,
         customer.billingCity,
         customer.billingAddress,
+        customer.maintenanceMonday,
+        customer.maintenanceTuesday,
+        customer.maintenanceWednesday,
+        customer.maintenanceThursday,
+        customer.maintenanceFriday,
+        customer.maintenanceSaturday,
+        customer.maintenanceSunday,
         customer.notes,
         id
       ]
@@ -2082,7 +2175,11 @@ async function createMaintenancePlan(input) {
   await assertEmployeeExists(employeeId);
 
   const settings = await getAppSettings();
-  const nextDueOn = adjustDateKeyForWeekend(input.nextDueOn, settings);
+  const customerWeekdays = await getCustomerMaintenanceWeekdaysForTarget(targetType, targetId);
+  if (!hasAnyAllowedMaintenanceWeekday(settings, customerWeekdays)) {
+    throw createError("Für diesen Kunden bleibt mit den Stammdaten kein erlaubter Wartungstag übrig.", 400);
+  }
+  const nextDueOn = adjustDateKeyForWeekend(input.nextDueOn, settings, customerWeekdays);
   const assetId = targetType === "asset" ? targetId : null;
   const [result] = await pool.execute(
     `
@@ -2173,22 +2270,103 @@ function addDays(date, days) {
   return nextDate;
 }
 
-function isSkippedMaintenanceWeekday(date, settings) {
-  const day = date.getUTCDay();
-  return (day === 6 && settings.skipSaturdaysForMaintenance)
-    || (day === 0 && settings.skipSundaysForMaintenance);
+function getCustomerMaintenanceWeekdaysFromRow(row) {
+  if (!row || customerMaintenanceWeekdayFields.every((field) => row[field.key] === null || row[field.key] === undefined)) {
+    return null;
+  }
+
+  return Object.fromEntries(customerMaintenanceWeekdayFields.map((field) => [
+    field.key,
+    parseBoolean(row[field.key])
+  ]));
 }
 
-function adjustDateForWeekend(date, settings) {
+function getCustomerMaintenanceWeekdaySelect(alias = "c") {
+  return customerMaintenanceWeekdayFields
+    .map((field) => `${alias}.${field.column} AS ${field.key}`)
+    .join(",\n        ");
+}
+
+async function getCustomerMaintenanceWeekdaysForTarget(targetType, targetId) {
+  if (!targetType || !targetId) {
+    return null;
+  }
+
+  let query;
+  if (targetType === "asset") {
+    query = `
+      SELECT
+        ${getCustomerMaintenanceWeekdaySelect("c")}
+      FROM assets a
+      LEFT JOIN buildings b ON b.id = a.building_id
+      LEFT JOIN apartments ap ON ap.id = a.apartment_id
+      LEFT JOIN buildings apb ON apb.id = ap.building_id
+      LEFT JOIN customers c ON c.id = COALESCE(ap.customer_id, apb.customer_id, b.customer_id)
+      WHERE a.id = ?
+    `;
+  } else if (targetType === "building") {
+    query = `
+      SELECT
+        ${getCustomerMaintenanceWeekdaySelect("c")}
+      FROM buildings b
+      LEFT JOIN customers c ON c.id = b.customer_id
+      WHERE b.id = ?
+    `;
+  } else if (targetType === "apartment") {
+    query = `
+      SELECT
+        ${getCustomerMaintenanceWeekdaySelect("c")}
+      FROM apartments ap
+      INNER JOIN buildings b ON b.id = ap.building_id
+      LEFT JOIN customers c ON c.id = COALESCE(ap.customer_id, b.customer_id)
+      WHERE ap.id = ?
+    `;
+  } else {
+    return null;
+  }
+
+  const [[row]] = await pool.execute(query, [targetId]);
+  return getCustomerMaintenanceWeekdaysFromRow(row);
+}
+
+function getMaintenanceWeekdayFieldByDay(day) {
+  return customerMaintenanceWeekdayFields.find((field) => field.day === day);
+}
+
+function hasAnyAllowedMaintenanceWeekday(settings, customerWeekdays = null) {
+  return customerMaintenanceWeekdayFields.some((field) => {
+    const blockedBySettings = (field.day === 6 && settings.skipSaturdaysForMaintenance)
+      || (field.day === 0 && settings.skipSundaysForMaintenance);
+    const blockedByCustomer = customerWeekdays ? !customerWeekdays[field.key] : false;
+    return !blockedBySettings && !blockedByCustomer;
+  });
+}
+
+function isSkippedMaintenanceWeekday(date, settings, customerWeekdays = null) {
+  const day = date.getUTCDay();
+  const weekdayField = getMaintenanceWeekdayFieldByDay(day);
+  const blockedBySettings = (day === 6 && settings.skipSaturdaysForMaintenance)
+    || (day === 0 && settings.skipSundaysForMaintenance);
+  const blockedByCustomer = customerWeekdays && weekdayField ? !customerWeekdays[weekdayField.key] : false;
+  return blockedBySettings || blockedByCustomer;
+}
+
+function adjustDateForWeekend(date, settings, customerWeekdays = null) {
+  if (!hasAnyAllowedMaintenanceWeekday(settings, customerWeekdays)) {
+    return date;
+  }
+
   let adjustedDate = date;
-  while (isSkippedMaintenanceWeekday(adjustedDate, settings)) {
+  let attempts = 0;
+  while (isSkippedMaintenanceWeekday(adjustedDate, settings, customerWeekdays) && attempts < 14) {
     adjustedDate = addDays(adjustedDate, 1);
+    attempts += 1;
   }
   return adjustedDate;
 }
 
-function adjustDateKeyForWeekend(value, settings) {
-  return formatDateKey(adjustDateForWeekend(parseDateKey(value), settings));
+function adjustDateKeyForWeekend(value, settings, customerWeekdays = null) {
+  return formatDateKey(adjustDateForWeekend(parseDateKey(value), settings, customerWeekdays));
 }
 
 function daysBetween(start, end) {
@@ -2201,6 +2379,7 @@ async function getCalendarEvents(startDate, endDate) {
     `
       SELECT
         mp.id,
+        mp.asset_id AS assetId,
         'maintenance' AS type,
         mp.title,
         DATE_FORMAT(mp.next_due_on, '%Y-%m-%d') AS dueDate,
@@ -2233,12 +2412,14 @@ async function getCalendarEvents(startDate, endDate) {
 
   const rangeStart = parseDateKey(startDate);
   const rangeEnd = parseDateKey(endDate);
-  const rawRangeStart = settings.skipSaturdaysForMaintenance || settings.skipSundaysForMaintenance
-    ? addDays(rangeStart, -2)
-    : rangeStart;
+  const rawRangeStart = addDays(rangeStart, -6);
   const events = [];
 
   for (const row of rows) {
+    const customerWeekdays = await getCustomerMaintenanceWeekdaysForTarget(
+      row.targetType || "asset",
+      row.targetId || row.assetId
+    );
     const intervalDays = Number(row.intervalDays);
     let dueDate = parseDateKey(row.dueDate);
 
@@ -2253,7 +2434,7 @@ async function getCalendarEvents(startDate, endDate) {
     let occurrenceIndex = 0;
     while (dueDate <= rangeEnd) {
       const rawDueDateKey = formatDateKey(dueDate);
-      const visibleDueDate = adjustDateForWeekend(dueDate, settings);
+      const visibleDueDate = adjustDateForWeekend(dueDate, settings, customerWeekdays);
       const visibleDueDateKey = formatDateKey(visibleDueDate);
       if (visibleDueDate >= rangeStart && visibleDueDate <= rangeEnd) {
         events.push({

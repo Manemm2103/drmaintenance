@@ -670,6 +670,22 @@ textarea:focus {
   display: none;
 }
 
+.weekday-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fbfbf8;
+}
+
+.weekday-fields > span {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 textarea {
   resize: vertical;
 }
@@ -901,6 +917,7 @@ textarea {
   .kpi-grid,
   .form-grid,
   .billing-fields,
+  .weekday-fields,
   .asset-filter-bar,
   .users-layout {
     grid-template-columns: 1fr;
