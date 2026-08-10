@@ -232,13 +232,11 @@ app.get("/api/customers", asyncRoute(async (_req, res) => {
 }));
 
 app.post("/api/customers", asyncRoute(async (req, res) => {
-  requireFields(req.body, ["name"]);
   const customer = await db.createCustomer(req.body);
   res.status(201).json(customer);
 }));
 
 app.patch("/api/customers/:id", asyncRoute(async (req, res) => {
-  requireFields(req.body, ["name"]);
   res.json(await db.updateCustomer(Number(req.params.id), req.body));
 }));
 

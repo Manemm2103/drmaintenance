@@ -598,6 +598,20 @@ textarea:focus {
   height: 18px;
 }
 
+.billing-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fbfbf8;
+}
+
+.billing-fields[hidden] {
+  display: none;
+}
+
 textarea {
   resize: vertical;
 }
@@ -809,6 +823,7 @@ textarea {
   .workspace-grid,
   .kpi-grid,
   .form-grid,
+  .billing-fields,
   .users-layout {
     grid-template-columns: 1fr;
   }

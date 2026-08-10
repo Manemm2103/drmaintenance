@@ -120,8 +120,12 @@
                   <input name="customerNumber" placeholder="wird automatisch vergeben">
                 </label>
                 <label>
-                  Kundenname
-                  <input name="name" placeholder="z.B. Müller Immobilien" required>
+                  Vorname
+                  <input name="firstName" placeholder="z.B. Max" required>
+                </label>
+                <label>
+                  Name
+                  <input name="lastName" placeholder="z.B. Müller" required>
                 </label>
                 <label>
                   Ansprechpartner
@@ -136,9 +140,47 @@
                   <input name="phone" placeholder="+49 ...">
                 </label>
                 <label>
-                  Rechnungsadresse
-                  <input name="billingAddress" placeholder="Straße, Ort">
+                  Straße
+                  <input name="street" placeholder="z.B. Musterstraße">
                 </label>
+                <label>
+                  Hausnummer
+                  <input name="houseNumber" placeholder="z.B. 12">
+                </label>
+                <label>
+                  PLZ
+                  <input name="postalCode" placeholder="z.B. 12345">
+                </label>
+                <label>
+                  Ort
+                  <input name="city" placeholder="z.B. Musterstadt">
+                </label>
+                <label class="check-row span-2">
+                  <input name="billingAddressDiffers" id="billingAddressDiffersInput" type="checkbox">
+                  Rechnungsadresse weicht ab
+                </label>
+                <div class="billing-fields span-2" id="billingFields" hidden>
+                  <label class="span-2">
+                    RE-Empfänger
+                    <input name="billingRecipient" placeholder="z.B. Verwaltung Müller GmbH">
+                  </label>
+                  <label>
+                    RE-Straße
+                    <input name="billingStreet" placeholder="z.B. Rechnungsstraße">
+                  </label>
+                  <label>
+                    RE-Hausnummer
+                    <input name="billingHouseNumber" placeholder="z.B. 7">
+                  </label>
+                  <label>
+                    RE-PLZ
+                    <input name="billingPostalCode" placeholder="z.B. 54321">
+                  </label>
+                  <label>
+                    RE-Ort
+                    <input name="billingCity" placeholder="z.B. Rechnungsstadt">
+                  </label>
+                </div>
                 <label class="span-2">
                   Notizen
                   <textarea name="notes" rows="3" placeholder="Interne Hinweise"></textarea>

@@ -51,6 +51,8 @@ const els = {
   customerIdInput: document.querySelector("#customerIdInput"),
   customerSubmitButton: document.querySelector("#customerSubmitButton"),
   customerNewButton: document.querySelector("#customerNewButton"),
+  billingAddressDiffersInput: document.querySelector("#billingAddressDiffersInput"),
+  billingFields: document.querySelector("#billingFields"),
   userForm: document.querySelector("#userForm"),
   toast: document.querySelector("#toast")
 };
@@ -426,6 +428,12 @@ function formatCustomerLabel(customerNumber, customerName) {
   return [customerNumber, customerName].filter(Boolean).join(" - ");
 }
 
+function formatAddressLabel(street, houseNumber, postalCode, city) {
+  const streetLine = [street, houseNumber].filter(Boolean).join(" ");
+  const cityLine = [postalCode, city].filter(Boolean).join(" ");
+  return [streetLine, cityLine].filter(Boolean).join(", ");
+}
+
 function renderCustomers(customers) {
   if (!customers || customers.length === 0) {
     els.customerList.innerHTML = '<div class="list-item">Keine Kunden angelegt.</div>';
@@ -438,6 +446,8 @@ function renderCustomers(customers) {
         <strong>${escapeHtml(customer.name)}</strong>
         <div class="list-meta">
           <span>${escapeHtml(customer.customerNumber)}</span>
+          <span>${escapeHtml(formatAddressLabel(customer.street, customer.houseNumber, customer.postalCode, customer.city) || "Keine Adresse")}</span>
+          ${Number(customer.billingAddressDiffers) === 1 ? `<span>RE: ${escapeHtml(formatAddressLabel(customer.billingStreet, customer.billingHouseNumber, customer.billingPostalCode, customer.billingCity))}</span>` : ""}
           <span>${escapeHtml(customer.contactName || "Kein Ansprechpartner")}</span>
           <span>${escapeHtml(customer.email || "Keine E-Mail")}</span>
           <span>${escapeHtml(customer.phone || "Kein Telefon")}</span>
@@ -648,29 +658,62 @@ function getCustomerFormPayload() {
   return {
     id: data.customerId ? Number(data.customerId) : null,
     customerNumber: data.customerNumber,
-    name: data.name,
+    firstName: data.firstName,
+    lastName: data.lastName,
     contactName: data.contactName,
     email: data.email,
     phone: data.phone,
-    billingAddress: data.billingAddress,
+    street: data.street,
+    houseNumber: data.houseNumber,
+    postalCode: data.postalCode,
+    city: data.city,
+    billingAddressDiffers: els.billingAddressDiffersInput.checked,
+    billingRecipient: data.billingRecipient,
+    billingStreet: data.billingStreet,
+    billingHouseNumber: data.billingHouseNumber,
+    billingPostalCode: data.billingPostalCode,
+    billingCity: data.billingCity,
     notes: data.notes
   };
+}
+
+function syncBillingAddressFields() {
+  const isVisible = els.billingAddressDiffersInput.checked;
+  els.billingFields.hidden = !isVisible;
+  els.billingFields.querySelectorAll("input").forEach((input) => {
+    input.required = isVisible;
+    if (!isVisible) {
+      input.value = "";
+    }
+  });
 }
 
 function resetCustomerForm() {
   els.customerForm.reset();
   els.customerIdInput.value = "";
+  syncBillingAddressFields();
   els.customerSubmitButton.textContent = "Kunde speichern";
 }
 
 function loadCustomerIntoForm(customer) {
   els.customerForm.elements.customerId.value = customer.id;
   els.customerForm.elements.customerNumber.value = customer.customerNumber || "";
-  els.customerForm.elements.name.value = customer.name || "";
+  els.customerForm.elements.firstName.value = customer.firstName || "";
+  els.customerForm.elements.lastName.value = customer.lastName || "";
   els.customerForm.elements.contactName.value = customer.contactName || "";
   els.customerForm.elements.email.value = customer.email || "";
   els.customerForm.elements.phone.value = customer.phone || "";
-  els.customerForm.elements.billingAddress.value = customer.billingAddress || "";
+  els.customerForm.elements.street.value = customer.street || "";
+  els.customerForm.elements.houseNumber.value = customer.houseNumber || "";
+  els.customerForm.elements.postalCode.value = customer.postalCode || "";
+  els.customerForm.elements.city.value = customer.city || "";
+  els.customerForm.elements.billingAddressDiffers.checked = Number(customer.billingAddressDiffers) === 1;
+  syncBillingAddressFields();
+  els.customerForm.elements.billingRecipient.value = customer.billingRecipient || "";
+  els.customerForm.elements.billingStreet.value = customer.billingStreet || "";
+  els.customerForm.elements.billingHouseNumber.value = customer.billingHouseNumber || "";
+  els.customerForm.elements.billingPostalCode.value = customer.billingPostalCode || "";
+  els.customerForm.elements.billingCity.value = customer.billingCity || "";
   els.customerForm.elements.notes.value = customer.notes || "";
   els.customerSubmitButton.textContent = "Änderungen speichern";
   setView("kunden", { updateHash: true, scrollTop: false });
@@ -1115,11 +1158,21 @@ function bindEvents() {
       method: isUpdate ? "PATCH" : "POST",
       body: JSON.stringify({
         customerNumber: data.customerNumber,
-        name: data.name,
+        firstName: data.firstName,
+        lastName: data.lastName,
         contactName: data.contactName,
         email: data.email,
         phone: data.phone,
-        billingAddress: data.billingAddress,
+        street: data.street,
+        houseNumber: data.houseNumber,
+        postalCode: data.postalCode,
+        city: data.city,
+        billingAddressDiffers: data.billingAddressDiffers,
+        billingRecipient: data.billingRecipient,
+        billingStreet: data.billingStreet,
+        billingHouseNumber: data.billingHouseNumber,
+        billingPostalCode: data.billingPostalCode,
+        billingCity: data.billingCity,
         notes: data.notes
       })
     });
@@ -1130,6 +1183,7 @@ function bindEvents() {
   });
 
   els.customerNewButton.addEventListener("click", resetCustomerForm);
+  els.billingAddressDiffersInput.addEventListener("change", syncBillingAddressFields);
 
   els.buildingForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1196,6 +1250,7 @@ function bindEvents() {
   });
 }
 
+syncBillingAddressFields();
 bindEvents();
 showViewFromHash();
 loadAppVersion();

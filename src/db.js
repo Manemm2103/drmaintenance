@@ -38,10 +38,22 @@ async function runMigrations() {
     CREATE TABLE IF NOT EXISTS customers (
       id INT AUTO_INCREMENT PRIMARY KEY,
       customer_number VARCHAR(24) NOT NULL,
+      first_name VARCHAR(100) NULL,
+      last_name VARCHAR(120) NULL,
       name VARCHAR(180) NOT NULL,
       contact_name VARCHAR(160) NULL,
       email VARCHAR(190) NULL,
       phone VARCHAR(80) NULL,
+      street VARCHAR(160) NULL,
+      house_number VARCHAR(40) NULL,
+      postal_code VARCHAR(20) NULL,
+      city VARCHAR(120) NULL,
+      billing_address_differs BOOLEAN NOT NULL DEFAULT FALSE,
+      billing_recipient VARCHAR(180) NULL,
+      billing_street VARCHAR(160) NULL,
+      billing_house_number VARCHAR(40) NULL,
+      billing_postal_code VARCHAR(20) NULL,
+      billing_city VARCHAR(120) NULL,
       billing_address VARCHAR(240) NULL,
       notes TEXT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -49,6 +61,36 @@ async function runMigrations() {
       UNIQUE KEY uq_customers_number (customer_number),
       INDEX idx_customers_name (name)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS first_name VARCHAR(100) NULL AFTER customer_number");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS last_name VARCHAR(120) NULL AFTER first_name");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS street VARCHAR(160) NULL AFTER phone");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS house_number VARCHAR(40) NULL AFTER street");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS postal_code VARCHAR(20) NULL AFTER house_number");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS city VARCHAR(120) NULL AFTER postal_code");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_address_differs BOOLEAN NOT NULL DEFAULT FALSE AFTER city");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_recipient VARCHAR(180) NULL AFTER billing_address_differs");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_street VARCHAR(160) NULL AFTER billing_recipient");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_house_number VARCHAR(40) NULL AFTER billing_street");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_postal_code VARCHAR(20) NULL AFTER billing_house_number");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_city VARCHAR(120) NULL AFTER billing_postal_code");
+  await pool.query(`
+    UPDATE customers
+    SET
+      first_name = CASE
+        WHEN first_name IS NULL OR first_name = '' THEN SUBSTRING_INDEX(name, ' ', 1)
+        ELSE first_name
+      END,
+      last_name = CASE
+        WHEN last_name IS NULL OR last_name = '' THEN COALESCE(NULLIF(TRIM(SUBSTRING(name, LENGTH(SUBSTRING_INDEX(name, ' ', 1)) + 1)), ''), name)
+        ELSE last_name
+      END,
+      street = CASE
+        WHEN (street IS NULL OR street = '') AND billing_address IS NOT NULL AND billing_address <> '' THEN billing_address
+        ELSE street
+      END
+    WHERE name IS NOT NULL
   `);
 
   await pool.query(`
@@ -374,9 +416,23 @@ async function seedPropertyData() {
 
   const [customerResult] = await pool.query(
     `
-      INSERT INTO customers (customer_number, name, contact_name, email, phone, billing_address, notes)
+      INSERT INTO customers (
+        customer_number,
+        first_name,
+        last_name,
+        name,
+        contact_name,
+        email,
+        phone,
+        street,
+        house_number,
+        postal_code,
+        city,
+        billing_address_differs,
+        notes
+      )
       VALUES
-        ('C0000154', 'DR Home Musterkunde', 'Max Mustermann', 'kunde@example.com', '+49 000 000000', 'Musterstraße 12', 'Beispielkunde für den neuen Kundenworkflow.')
+        ('C0000154', 'Max', 'Mustermann', 'Max Mustermann', 'Max Mustermann', 'kunde@example.com', '+49 000 000000', 'Musterstraße', '12', '12345', 'Musterstadt', FALSE, 'Beispielkunde für den neuen Kundenworkflow.')
     `
   );
 
@@ -437,8 +493,15 @@ async function normalizeGermanText() {
 
   const columns = [
     ["customers", "customer_number"],
+    ["customers", "first_name"],
+    ["customers", "last_name"],
     ["customers", "name"],
     ["customers", "contact_name"],
+    ["customers", "street"],
+    ["customers", "city"],
+    ["customers", "billing_recipient"],
+    ["customers", "billing_street"],
+    ["customers", "billing_city"],
     ["customers", "billing_address"],
     ["customers", "notes"],
     ["assets", "name"],
@@ -872,10 +935,22 @@ async function listCustomers() {
     SELECT
       id,
       customer_number AS customerNumber,
+      COALESCE(NULLIF(first_name, ''), SUBSTRING_INDEX(name, ' ', 1)) AS firstName,
+      COALESCE(NULLIF(last_name, ''), NULLIF(TRIM(SUBSTRING(name, LENGTH(SUBSTRING_INDEX(name, ' ', 1)) + 1)), ''), name) AS lastName,
       name,
       contact_name AS contactName,
       email,
       phone,
+      street,
+      house_number AS houseNumber,
+      postal_code AS postalCode,
+      city,
+      billing_address_differs AS billingAddressDiffers,
+      billing_recipient AS billingRecipient,
+      billing_street AS billingStreet,
+      billing_house_number AS billingHouseNumber,
+      billing_postal_code AS billingPostalCode,
+      billing_city AS billingCity,
       billing_address AS billingAddress,
       notes
     FROM customers
@@ -894,20 +969,94 @@ async function generateCustomerNumber() {
   return `C${String(nextNumber).padStart(7, "0")}`;
 }
 
-async function normalizeCustomerInput(input, existingCustomer = null) {
-  const name = input.name?.trim();
+function normalizeText(value) {
+  return value?.trim() || null;
+}
+
+function parseBoolean(value) {
+  return value === true || value === 1 || value === "1" || value === "true" || value === "on";
+}
+
+function splitLegacyCustomerName(value) {
+  const name = normalizeText(value);
   if (!name) {
-    throw createError("Kundenname ist ein Pflichtfeld.", 400);
+    return {
+      firstName: null,
+      lastName: null
+    };
+  }
+
+  const [firstName, ...rest] = name.split(/\s+/);
+  return {
+    firstName,
+    lastName: rest.join(" ") || name
+  };
+}
+
+function combineName(firstName, lastName) {
+  return [firstName, lastName].filter(Boolean).join(" ");
+}
+
+function combineAddress(street, houseNumber, postalCode, city) {
+  const streetLine = [street, houseNumber].filter(Boolean).join(" ");
+  const cityLine = [postalCode, city].filter(Boolean).join(" ");
+  return [streetLine, cityLine].filter(Boolean).join(", ") || null;
+}
+
+async function normalizeCustomerInput(input, existingCustomer = null) {
+  const legacyName = normalizeText(input.name);
+  const parsedLegacyInput = splitLegacyCustomerName(legacyName);
+  const parsedExisting = splitLegacyCustomerName(existingCustomer?.name);
+  const firstName = normalizeText(input.firstName)
+    || parsedLegacyInput.firstName
+    || existingCustomer?.firstName
+    || parsedExisting.firstName;
+  const lastName = normalizeText(input.lastName)
+    || parsedLegacyInput.lastName
+    || existingCustomer?.lastName
+    || parsedExisting.lastName;
+
+  if (!firstName || !lastName) {
+    throw createError("Vorname und Name sind Pflichtfelder.", 400);
+  }
+
+  const street = normalizeText(input.street) || null;
+  const houseNumber = normalizeText(input.houseNumber) || null;
+  const postalCode = normalizeText(input.postalCode) || null;
+  const city = normalizeText(input.city) || null;
+  const billingAddressDiffers = parseBoolean(input.billingAddressDiffers);
+  const billingRecipient = billingAddressDiffers ? normalizeText(input.billingRecipient) : null;
+  const billingStreet = billingAddressDiffers ? normalizeText(input.billingStreet) : null;
+  const billingHouseNumber = billingAddressDiffers ? normalizeText(input.billingHouseNumber) : null;
+  const billingPostalCode = billingAddressDiffers ? normalizeText(input.billingPostalCode) : null;
+  const billingCity = billingAddressDiffers ? normalizeText(input.billingCity) : null;
+
+  if (billingAddressDiffers && (!billingRecipient || !billingStreet || !billingHouseNumber || !billingPostalCode || !billingCity)) {
+    throw createError("Bei abweichender Rechnungsadresse sind Empfänger, Straße, Hausnummer, PLZ und Ort Pflichtfelder.", 400);
   }
 
   return {
     customerNumber: input.customerNumber?.trim() || existingCustomer?.customerNumber || await generateCustomerNumber(),
-    name,
-    contactName: input.contactName?.trim() || null,
-    email: input.email?.trim() || null,
-    phone: input.phone?.trim() || null,
-    billingAddress: input.billingAddress?.trim() || null,
-    notes: input.notes?.trim() || null
+    firstName,
+    lastName,
+    name: combineName(firstName, lastName),
+    contactName: normalizeText(input.contactName),
+    email: normalizeText(input.email),
+    phone: normalizeText(input.phone),
+    street,
+    houseNumber,
+    postalCode,
+    city,
+    billingAddressDiffers,
+    billingRecipient,
+    billingStreet,
+    billingHouseNumber,
+    billingPostalCode,
+    billingCity,
+    billingAddress: billingAddressDiffers
+      ? combineAddress(billingStreet, billingHouseNumber, billingPostalCode, billingCity)
+      : combineAddress(street, houseNumber, postalCode, city),
+    notes: normalizeText(input.notes)
   };
 }
 
@@ -936,15 +1085,47 @@ async function createCustomer(input) {
   try {
     const [result] = await pool.execute(
       `
-        INSERT INTO customers (customer_number, name, contact_name, email, phone, billing_address, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO customers (
+          customer_number,
+          first_name,
+          last_name,
+          name,
+          contact_name,
+          email,
+          phone,
+          street,
+          house_number,
+          postal_code,
+          city,
+          billing_address_differs,
+          billing_recipient,
+          billing_street,
+          billing_house_number,
+          billing_postal_code,
+          billing_city,
+          billing_address,
+          notes
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         customer.customerNumber,
+        customer.firstName,
+        customer.lastName,
         customer.name,
         customer.contactName,
         customer.email,
         customer.phone,
+        customer.street,
+        customer.houseNumber,
+        customer.postalCode,
+        customer.city,
+        customer.billingAddressDiffers,
+        customer.billingRecipient,
+        customer.billingStreet,
+        customer.billingHouseNumber,
+        customer.billingPostalCode,
+        customer.billingCity,
         customer.billingAddress,
         customer.notes
       ]
@@ -967,10 +1148,22 @@ async function getCustomerById(id) {
       SELECT
         id,
         customer_number AS customerNumber,
+        COALESCE(NULLIF(first_name, ''), SUBSTRING_INDEX(name, ' ', 1)) AS firstName,
+        COALESCE(NULLIF(last_name, ''), NULLIF(TRIM(SUBSTRING(name, LENGTH(SUBSTRING_INDEX(name, ' ', 1)) + 1)), ''), name) AS lastName,
         name,
         contact_name AS contactName,
         email,
         phone,
+        street,
+        house_number AS houseNumber,
+        postal_code AS postalCode,
+        city,
+        billing_address_differs AS billingAddressDiffers,
+        billing_recipient AS billingRecipient,
+        billing_street AS billingStreet,
+        billing_house_number AS billingHouseNumber,
+        billing_postal_code AS billingPostalCode,
+        billing_city AS billingCity,
         billing_address AS billingAddress,
         notes
       FROM customers
@@ -993,15 +1186,46 @@ async function updateCustomer(id, input) {
     await pool.execute(
       `
         UPDATE customers
-        SET customer_number = ?, name = ?, contact_name = ?, email = ?, phone = ?, billing_address = ?, notes = ?
+        SET
+          customer_number = ?,
+          first_name = ?,
+          last_name = ?,
+          name = ?,
+          contact_name = ?,
+          email = ?,
+          phone = ?,
+          street = ?,
+          house_number = ?,
+          postal_code = ?,
+          city = ?,
+          billing_address_differs = ?,
+          billing_recipient = ?,
+          billing_street = ?,
+          billing_house_number = ?,
+          billing_postal_code = ?,
+          billing_city = ?,
+          billing_address = ?,
+          notes = ?
         WHERE id = ?
       `,
       [
         customer.customerNumber,
+        customer.firstName,
+        customer.lastName,
         customer.name,
         customer.contactName,
         customer.email,
         customer.phone,
+        customer.street,
+        customer.houseNumber,
+        customer.postalCode,
+        customer.city,
+        customer.billingAddressDiffers,
+        customer.billingRecipient,
+        customer.billingStreet,
+        customer.billingHouseNumber,
+        customer.billingPostalCode,
+        customer.billingCity,
         customer.billingAddress,
         customer.notes,
         id
