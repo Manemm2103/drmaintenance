@@ -19,6 +19,7 @@ In Portainer am besten einen Stack aus dem Git-Repository anlegen:
 - Compose path: `docker-compose.portainer.yml`
 - Environment:
   - `WEB_PORT=3000`
+  - `DB_PORT_EXTERN=3306`
   - `DB_NAME=drmaintenance`
 - `DB_USER=drmaintenance`
 - `DB_PASSWORD=<sicheres-passwort>`
@@ -30,6 +31,7 @@ In Portainer am besten einen Stack aus dem Git-Repository anlegen:
 - `COOKIE_SECURE=false`
 
 Die Web-App ist danach über `http://<server-ip>:3000` erreichbar.
+Die Datenbank ist danach über `<server-ip>:3306` erreichbar, wenn `DB_PORT_EXTERN=3306` gesetzt ist. Für einen anderen externen Port kannst du z.B. `DB_PORT_EXTERN=3307` verwenden; intern bleibt MariaDB im Stack immer auf Port `3306`.
 
 Der initiale Adminbenutzer wird beim ersten Start aus den `ADMIN_*` Variablen angelegt. Er ist ein Systembenutzer und kann in der App nicht verändert oder gelöscht werden. Wenn du die `ADMIN_*` Werte später änderst, wird ein bereits vorhandener Systemadmin nicht überschrieben.
 
@@ -42,7 +44,7 @@ Der Workflow startet bei einem Kunden. Beim Anlegen vergibt DR Maintenance autom
 ## Container
 
 - `web`: Node.js/Express-App mit statischem Frontend und JSON API
-- `db`: MariaDB 11.4 mit persistentem Docker-Volume `db_data`
+- `db`: MariaDB 11.4 mit persistentem Docker-Volume `db_data` und optional veröffentlichtem externem Port über `DB_PORT_EXTERN`
 
 ## API in Version 0.1
 
@@ -81,7 +83,7 @@ Der Workflow startet bei einem Kunden. Beim Anlegen vergibt DR Maintenance autom
 
 ## Versionierung
 
-Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.10.01`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
+Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.10.02`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
 
 ## Nächste sinnvolle Schritte
 
