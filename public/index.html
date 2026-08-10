@@ -25,6 +25,7 @@
           <a href="#wartungsobjekte" data-view-link="wartungsobjekte">Objekte</a>
           <a href="#gebaeude" data-view-link="gebaeude">Gebäude</a>
           <a href="#planung" data-view-link="planung">Wartungspläne</a>
+          <a href="#mitarbeiter" data-view-link="mitarbeiter">Mitarbeiter</a>
           <a href="#benutzer" data-view-link="benutzer">Benutzer</a>
         </nav>
 
@@ -453,6 +454,12 @@
                 </label>
                 <button class="ghost-button" type="button" data-view-target="wartungsobjekte" data-scroll-target="assetForm">Objekt anlegen</button>
               </div>
+              <label class="span-2">
+                Mitarbeiter
+                <select name="employeeId" id="maintenanceEmployeeSelect">
+                  <option value="">Noch nicht zugewiesen</option>
+                </select>
+              </label>
               <label>
                 Intervall in Tagen
                 <input name="intervalDays" type="number" min="1" value="365" required>
@@ -473,6 +480,59 @@
               </div>
             </div>
             <div class="plan-list" id="planList"></div>
+          </article>
+          </section>
+        </section>
+
+        <section class="view" data-view="mitarbeiter">
+          <section class="workspace-grid single-view-grid">
+          <article class="panel wide" id="mitarbeiter">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Team</p>
+                <h2>Mitarbeiter</h2>
+              </div>
+            </div>
+            <div class="users-layout">
+              <form id="employeeForm" class="form-grid">
+                <input type="hidden" name="employeeId" id="employeeIdInput">
+                <label>
+                  Mitarbeiternummer
+                  <input name="employeeNumber" placeholder="z.B. M0001">
+                </label>
+                <label>
+                  Vorname
+                  <input name="firstName" placeholder="Max" required>
+                </label>
+                <label>
+                  Name
+                  <input name="lastName" placeholder="Mustermann" required>
+                </label>
+                <label>
+                  E-Mail
+                  <input name="email" type="email" placeholder="max@example.com">
+                </label>
+                <label>
+                  Telefon
+                  <input name="phone" placeholder="+49 ...">
+                </label>
+                <label>
+                  Funktion
+                  <input name="roleTitle" placeholder="z.B. Techniker">
+                </label>
+                <label class="check-row span-2">
+                  <input name="active" id="employeeActiveInput" type="checkbox" checked>
+                  Aktiv
+                </label>
+                <label class="span-2">
+                  Notizen
+                  <textarea name="notes" rows="3" placeholder="Qualifikationen, Einsatzgebiet oder interne Hinweise"></textarea>
+                </label>
+                <button class="primary-button" id="employeeSubmitButton" type="submit">Mitarbeiter speichern</button>
+                <button class="ghost-button" id="employeeNewButton" type="button">Neu</button>
+              </form>
+              <div class="user-list" id="employeeList"></div>
+            </div>
           </article>
           </section>
         </section>

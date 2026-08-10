@@ -25,6 +25,7 @@ const els = {
   planList: document.querySelector("#planList"),
   activityList: document.querySelector("#activityList"),
   customerList: document.querySelector("#customerList"),
+  employeeList: document.querySelector("#employeeList"),
   userList: document.querySelector("#userList"),
   propertyList: document.querySelector("#propertyList"),
   assetSelect: document.querySelector("#assetSelect"),
@@ -33,6 +34,7 @@ const els = {
   buildingCustomerSelect: document.querySelector("#buildingCustomerSelect"),
   apartmentCustomerSelect: document.querySelector("#apartmentCustomerSelect"),
   maintenanceTargetSelect: document.querySelector("#maintenanceTargetSelect"),
+  maintenanceEmployeeSelect: document.querySelector("#maintenanceEmployeeSelect"),
   maintenanceDueDate: document.querySelector("#maintenanceDueDate"),
   calendarGrid: document.querySelector("#calendarGrid"),
   calendarMonthLabel: document.querySelector("#calendarMonthLabel"),
@@ -59,6 +61,11 @@ const els = {
   customerNewButton: document.querySelector("#customerNewButton"),
   billingAddressDiffersInput: document.querySelector("#billingAddressDiffersInput"),
   billingFields: document.querySelector("#billingFields"),
+  employeeForm: document.querySelector("#employeeForm"),
+  employeeIdInput: document.querySelector("#employeeIdInput"),
+  employeeSubmitButton: document.querySelector("#employeeSubmitButton"),
+  employeeNewButton: document.querySelector("#employeeNewButton"),
+  employeeActiveInput: document.querySelector("#employeeActiveInput"),
   userForm: document.querySelector("#userForm"),
   toast: document.querySelector("#toast")
 };
@@ -132,6 +139,14 @@ const viewConfig = {
     actionView: "planung",
     scrollTarget: "new-maintenance"
   },
+  mitarbeiter: {
+    eyebrow: "Team",
+    title: "Mitarbeiter verwalten.",
+    actionLabel: "Mitarbeiter",
+    actionTitle: "Neuen Mitarbeiter anlegen",
+    actionView: "mitarbeiter",
+    scrollTarget: "employeeForm"
+  },
   benutzer: {
     eyebrow: "Administration",
     title: "Benutzer verwalten.",
@@ -152,6 +167,7 @@ const hashViewMap = {
   gebaeude: "gebaeude",
   planung: "planung",
   "new-maintenance": "planung",
+  mitarbeiter: "mitarbeiter",
   benutzer: "benutzer"
 };
 
@@ -159,6 +175,7 @@ let visibleMonth = startOfMonth(new Date());
 let latestAssets = [];
 let latestProperties = [];
 let latestCustomers = [];
+let latestEmployees = [];
 const searchableSelects = new Map();
 
 async function api(path, options = {}) {
@@ -306,7 +323,8 @@ function initializeSearchableSelects() {
     els.apartmentBuildingSelect,
     els.buildingCustomerSelect,
     els.apartmentCustomerSelect,
-    els.maintenanceTargetSelect
+    els.maintenanceTargetSelect,
+    els.maintenanceEmployeeSelect
   ].forEach(createSearchableSelect);
 }
 
@@ -544,9 +562,10 @@ async function loadCurrentUser() {
 }
 
 function renderSummary(payload) {
-  const { summary, workOrders, assets, plans, activity, customers, users } = payload;
+  const { summary, workOrders, assets, plans, activity, customers, employees, users } = payload;
   latestAssets = assets || [];
   latestCustomers = customers || [];
+  latestEmployees = employees || [];
 
   els.assetCount.textContent = summary.assetCount;
   els.planCount.textContent = summary.activePlanCount;
@@ -560,9 +579,11 @@ function renderSummary(payload) {
   renderPlans(plans);
   renderActivity(activity);
   renderCustomers(customers);
+  renderEmployees(employees);
   renderUsers(users);
   renderCustomerOptions(customers);
   renderAssetOptions(assets);
+  renderEmployeeOptions(employees);
 }
 
 function renderWorkOrders(workOrders) {
@@ -696,6 +717,7 @@ function renderPlans(plans) {
         <div class="list-meta">
           <span>${escapeHtml(plan.targetName || "Kein Objekt")}</span>
           <span>${escapeHtml(plan.targetSubtitle || "")}</span>
+          <span>${escapeHtml(plan.employeeName || "Kein Mitarbeiter")}</span>
           <span>${formatDate(plan.nextDueOn)}</span>
           <span>${plan.intervalDays} Tage</span>
         </div>
@@ -736,6 +758,31 @@ function renderUsers(users) {
           ? '<span class="system-note">Systemadmin</span>'
           : `<button class="compact-button" type="button" title="Benutzer löschen" aria-label="Benutzer löschen" data-delete-user="${user.id}">X</button>`
         }
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderEmployees(employees) {
+  if (!employees || employees.length === 0) {
+    els.employeeList.innerHTML = '<div class="list-item">Keine Mitarbeiter angelegt.</div>';
+    return;
+  }
+
+  els.employeeList.innerHTML = employees.map((employee) => `
+    <div class="user-item clickable-list-item" role="button" tabindex="0" data-edit-employee="${employee.id}" title="Mitarbeiter bearbeiten">
+      <div>
+        <strong>${escapeHtml(employee.name)}</strong>
+        <div class="list-meta">
+          <span>${escapeHtml(employee.employeeNumber || "Ohne Nummer")}</span>
+          <span>${escapeHtml(employee.roleTitle || "Keine Funktion")}</span>
+          <span>${escapeHtml(employee.email || "Keine E-Mail")}</span>
+          <span>${escapeHtml(employee.phone || "Kein Telefon")}</span>
+          <span>${Number(employee.active) === 1 ? "Aktiv" : "Inaktiv"}</span>
+        </div>
+      </div>
+      <div class="user-actions">
+        <button class="compact-button" type="button" title="Mitarbeiter löschen" aria-label="Mitarbeiter löschen" data-delete-employee="${employee.id}">X</button>
       </div>
     </div>
   `).join("");
@@ -853,7 +900,7 @@ function renderCalendar(events) {
         ${dayEvents.slice(0, 3).map((event) => `
           <span class="calendar-event" title="${escapeHtml(event.title)}">
             ${escapeHtml(event.title)}
-            <small>${escapeHtml([event.targetName || "Kein Objekt", event.intervalDays ? `alle ${event.intervalDays} Tage` : ""].filter(Boolean).join(" - "))}</small>
+            <small>${escapeHtml([event.targetName || "Kein Objekt", event.employeeName || "", event.intervalDays ? `alle ${event.intervalDays} Tage` : ""].filter(Boolean).join(" - "))}</small>
           </span>
         `).join("")}
         ${dayEvents.length > 3 ? `<span class="muted">+${dayEvents.length - 3} weitere</span>` : ""}
@@ -934,6 +981,17 @@ function renderMaintenanceTargetOptions(targets) {
   )).join("");
   els.maintenanceTargetSelect.value = currentValue;
   refreshSearchableSelect(els.maintenanceTargetSelect);
+}
+
+function renderEmployeeOptions(employees) {
+  const currentValue = els.maintenanceEmployeeSelect.value;
+  els.maintenanceEmployeeSelect.innerHTML = '<option value="">Noch nicht zugewiesen</option>' + (employees || []).map((employee) => {
+    const status = Number(employee.active) === 1 ? "" : " - inaktiv";
+    const number = employee.employeeNumber ? `${employee.employeeNumber} - ` : "";
+    return `<option value="${employee.id}">${escapeHtml(`${number}${employee.name}${status}`)}</option>`;
+  }).join("");
+  els.maintenanceEmployeeSelect.value = currentValue;
+  refreshSearchableSelect(els.maintenanceEmployeeSelect);
 }
 
 function getAssetFormPayload() {
@@ -1049,6 +1107,43 @@ function loadCustomerIntoForm(customer) {
   window.setTimeout(() => scrollToTarget("customerForm"), 0);
 }
 
+function getEmployeeFormPayload() {
+  const data = Object.fromEntries(new FormData(els.employeeForm));
+  return {
+    id: data.employeeId ? Number(data.employeeId) : null,
+    employeeNumber: data.employeeNumber,
+    firstName: data.firstName,
+    lastName: data.lastName,
+    email: data.email,
+    phone: data.phone,
+    roleTitle: data.roleTitle,
+    active: els.employeeActiveInput.checked,
+    notes: data.notes
+  };
+}
+
+function resetEmployeeForm() {
+  els.employeeForm.reset();
+  els.employeeIdInput.value = "";
+  els.employeeActiveInput.checked = true;
+  els.employeeSubmitButton.textContent = "Mitarbeiter speichern";
+}
+
+function loadEmployeeIntoForm(employee) {
+  els.employeeForm.elements.employeeId.value = employee.id;
+  els.employeeForm.elements.employeeNumber.value = employee.employeeNumber || "";
+  els.employeeForm.elements.firstName.value = employee.firstName || "";
+  els.employeeForm.elements.lastName.value = employee.lastName || "";
+  els.employeeForm.elements.email.value = employee.email || "";
+  els.employeeForm.elements.phone.value = employee.phone || "";
+  els.employeeForm.elements.roleTitle.value = employee.roleTitle || "";
+  els.employeeForm.elements.active.checked = Number(employee.active) === 1;
+  els.employeeForm.elements.notes.value = employee.notes || "";
+  els.employeeSubmitButton.textContent = "Änderungen speichern";
+  setView("mitarbeiter", { updateHash: true, scrollTop: false });
+  window.setTimeout(() => scrollToTarget("employeeForm"), 0);
+}
+
 function findApartmentById(id) {
   for (const building of latestProperties) {
     const apartment = building.apartments.find((item) => String(item.id) === String(id));
@@ -1145,6 +1240,18 @@ async function deleteUser(id) {
     method: "DELETE"
   });
   showToast("Benutzer gelöscht.");
+  await loadDashboard();
+}
+
+async function deleteEmployee(id) {
+  if (!window.confirm("Mitarbeiter wirklich löschen? Zugewiesene Wartungspläne bleiben erhalten, verlieren aber die Mitarbeiterzuordnung.")) {
+    return;
+  }
+
+  await api(`/api/employees/${id}`, {
+    method: "DELETE"
+  });
+  showToast("Mitarbeiter gelöscht.");
   await loadDashboard();
 }
 
@@ -1304,6 +1411,13 @@ function bindEvents() {
       deleteUser(deleteUserButton.dataset.deleteUser).catch((error) => showToast(error.message));
     }
 
+    const deleteEmployeeButton = event.target.closest("[data-delete-employee]");
+    if (deleteEmployeeButton) {
+      event.stopPropagation();
+      deleteEmployee(deleteEmployeeButton.dataset.deleteEmployee).catch((error) => showToast(error.message));
+      return;
+    }
+
     const deleteCustomerButton = event.target.closest("[data-delete-customer]");
     if (deleteCustomerButton) {
       event.stopPropagation();
@@ -1363,6 +1477,14 @@ function bindEvents() {
       }
     }
 
+    const editEmployee = event.target.closest("[data-edit-employee]");
+    if (editEmployee) {
+      const employee = latestEmployees.find((item) => String(item.id) === String(editEmployee.dataset.editEmployee));
+      if (employee) {
+        loadEmployeeIntoForm(employee);
+      }
+    }
+
     const editApartment = event.target.closest("[data-edit-apartment]");
     if (editApartment) {
       event.stopPropagation();
@@ -1407,6 +1529,16 @@ function bindEvents() {
       const customer = latestCustomers.find((item) => String(item.id) === String(editCustomer.dataset.editCustomer));
       if (customer) {
         loadCustomerIntoForm(customer);
+      }
+      return;
+    }
+
+    const editEmployee = event.target.closest("[data-edit-employee]");
+    if (editEmployee) {
+      event.preventDefault();
+      const employee = latestEmployees.find((item) => String(item.id) === String(editEmployee.dataset.editEmployee));
+      if (employee) {
+        loadEmployeeIntoForm(employee);
       }
       return;
     }
@@ -1462,6 +1594,10 @@ function bindEvents() {
       return;
     }
 
+    if (!validateSearchableSelect(els.maintenanceEmployeeSelect, "Bitte einen Mitarbeiter aus der Liste auswählen oder das Feld leeren.")) {
+      return;
+    }
+
     const data = Object.fromEntries(new FormData(els.maintenanceForm));
     const target = parseTargetValue(data.target);
 
@@ -1471,6 +1607,7 @@ function bindEvents() {
         title: data.title,
         targetType: target.targetType,
         targetId: target.targetId,
+        employeeId: data.employeeId ? Number(data.employeeId) : null,
         intervalDays: Number(data.intervalDays),
         nextDueOn: data.nextDueOn
       })
@@ -1478,6 +1615,7 @@ function bindEvents() {
 
     els.maintenanceForm.reset();
     syncSearchableSelect(els.maintenanceTargetSelect);
+    syncSearchableSelect(els.maintenanceEmployeeSelect);
     showToast("Wartungsplan gespeichert.");
     await loadDashboard();
   });
@@ -1601,6 +1739,32 @@ function bindEvents() {
 
   els.buildingNewButton.addEventListener("click", resetBuildingForm);
   els.apartmentNewButton.addEventListener("click", resetApartmentForm);
+
+  els.employeeForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = getEmployeeFormPayload();
+    const isUpdate = Boolean(data.id);
+
+    await api(isUpdate ? `/api/employees/${data.id}` : "/api/employees", {
+      method: isUpdate ? "PATCH" : "POST",
+      body: JSON.stringify({
+        employeeNumber: data.employeeNumber,
+        firstName: data.firstName,
+        lastName: data.lastName,
+        email: data.email,
+        phone: data.phone,
+        roleTitle: data.roleTitle,
+        active: data.active,
+        notes: data.notes
+      })
+    });
+
+    resetEmployeeForm();
+    showToast(isUpdate ? "Mitarbeiter aktualisiert." : "Mitarbeiter angelegt.");
+    await loadDashboard();
+  });
+
+  els.employeeNewButton.addEventListener("click", resetEmployeeForm);
 
   els.userForm.addEventListener("submit", async (event) => {
     event.preventDefault();

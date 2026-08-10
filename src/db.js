@@ -157,11 +157,31 @@ async function runMigrations() {
   await pool.query("ALTER TABLE assets ADD INDEX IF NOT EXISTS idx_assets_apartment (apartment_id)");
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS employees (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      employee_number VARCHAR(24) NULL,
+      first_name VARCHAR(100) NOT NULL,
+      last_name VARCHAR(120) NOT NULL,
+      email VARCHAR(190) NULL,
+      phone VARCHAR(80) NULL,
+      role_title VARCHAR(120) NULL,
+      active BOOLEAN NOT NULL DEFAULT TRUE,
+      notes TEXT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_employees_number (employee_number),
+      INDEX idx_employees_name (last_name, first_name),
+      INDEX idx_employees_active (active)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS maintenance_plans (
       id INT AUTO_INCREMENT PRIMARY KEY,
       asset_id INT NULL,
       target_type ENUM('asset', 'building', 'apartment') NULL,
       target_id INT NULL,
+      employee_id INT NULL,
       title VARCHAR(180) NOT NULL,
       interval_days INT NOT NULL,
       last_done_on DATE NULL,
@@ -172,14 +192,17 @@ async function runMigrations() {
       CONSTRAINT fk_plans_asset FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
       INDEX idx_plans_due (next_due_on),
       INDEX idx_plans_active (active),
-      INDEX idx_plans_target (target_type, target_id)
+      INDEX idx_plans_target (target_type, target_id),
+      INDEX idx_plans_employee (employee_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
   await pool.query("ALTER TABLE maintenance_plans MODIFY COLUMN asset_id INT NULL");
   await pool.query("ALTER TABLE maintenance_plans ADD COLUMN IF NOT EXISTS target_type ENUM('asset', 'building', 'apartment') NULL AFTER asset_id");
   await pool.query("ALTER TABLE maintenance_plans ADD COLUMN IF NOT EXISTS target_id INT NULL AFTER target_type");
+  await pool.query("ALTER TABLE maintenance_plans ADD COLUMN IF NOT EXISTS employee_id INT NULL AFTER target_id");
   await pool.query("ALTER TABLE maintenance_plans ADD INDEX IF NOT EXISTS idx_plans_target (target_type, target_id)");
+  await pool.query("ALTER TABLE maintenance_plans ADD INDEX IF NOT EXISTS idx_plans_employee (employee_id)");
   await pool.query("UPDATE maintenance_plans SET target_type = 'asset', target_id = asset_id WHERE target_type IS NULL AND asset_id IS NOT NULL");
 
   await pool.query(`
@@ -507,6 +530,10 @@ async function normalizeGermanText() {
     ["assets", "name"],
     ["assets", "asset_type"],
     ["assets", "location"],
+    ["employees", "first_name"],
+    ["employees", "last_name"],
+    ["employees", "role_title"],
+    ["employees", "notes"],
     ["maintenance_plans", "title"],
     ["work_orders", "title"],
     ["work_orders", "description"],
@@ -537,6 +564,7 @@ async function getDashboardSummary() {
       (SELECT COUNT(*) FROM work_orders WHERE status <> 'done') AS openWorkOrderCount,
       (SELECT COUNT(*) FROM work_orders WHERE status <> 'done' AND due_date < CURDATE()) AS overdueCount,
       (SELECT COUNT(*) FROM customers) AS customerCount,
+      (SELECT COUNT(*) FROM employees WHERE active = TRUE) AS employeeCount,
       (SELECT COUNT(*) FROM users WHERE active = TRUE) AS activeUserCount
   `);
 
@@ -565,6 +593,8 @@ async function getDashboardSummary() {
       DATE_FORMAT(mp.next_due_on, '%Y-%m-%d') AS nextDueOn,
       mp.target_type AS targetType,
       mp.target_id AS targetId,
+      mp.employee_id AS employeeId,
+      CONCAT(employee.first_name, ' ', employee.last_name) AS employeeName,
       COALESCE(
         CASE
           WHEN mp.target_type = 'asset' THEN target_asset.name
@@ -587,6 +617,7 @@ async function getDashboardSummary() {
     LEFT JOIN buildings target_building ON mp.target_type = 'building' AND target_building.id = mp.target_id
     LEFT JOIN apartments apartment ON mp.target_type = 'apartment' AND apartment.id = mp.target_id
     LEFT JOIN buildings apartment_building ON apartment_building.id = apartment.building_id
+    LEFT JOIN employees employee ON employee.id = mp.employee_id
     WHERE mp.active = TRUE
     ORDER BY mp.next_due_on ASC
   `);
@@ -643,6 +674,7 @@ async function getDashboardSummary() {
 
   const users = await listUsers();
   const customers = await listCustomers();
+  const employees = await listEmployees();
 
   return {
     summary,
@@ -651,6 +683,7 @@ async function getDashboardSummary() {
     assets,
     activity,
     customers,
+    employees,
     users
   };
 }
@@ -935,6 +968,192 @@ async function deleteUser(id) {
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('user', ?, ?)",
     [id, `Benutzer "${existingUser.username}" gelöscht.`]
+  );
+
+  return { deleted: true };
+}
+
+async function listEmployees() {
+  const [rows] = await pool.query(`
+    SELECT
+      id,
+      employee_number AS employeeNumber,
+      first_name AS firstName,
+      last_name AS lastName,
+      CONCAT(first_name, ' ', last_name) AS name,
+      email,
+      phone,
+      role_title AS roleTitle,
+      active,
+      notes,
+      created_at AS createdAt
+    FROM employees
+    ORDER BY active DESC, last_name ASC, first_name ASC
+  `);
+  return rows;
+}
+
+function normalizeEmployeeInput(input, existingEmployee = null) {
+  const firstName = normalizeText(input.firstName) || existingEmployee?.firstName;
+  const lastName = normalizeText(input.lastName) || existingEmployee?.lastName;
+
+  if (!firstName || !lastName) {
+    throw createError("Vorname und Name sind Pflichtfelder.", 400);
+  }
+
+  return {
+    employeeNumber: input.employeeNumber === undefined ? existingEmployee?.employeeNumber || null : normalizeText(input.employeeNumber),
+    firstName,
+    lastName,
+    email: input.email === undefined ? existingEmployee?.email || null : normalizeText(input.email),
+    phone: input.phone === undefined ? existingEmployee?.phone || null : normalizeText(input.phone),
+    roleTitle: input.roleTitle === undefined ? existingEmployee?.roleTitle || null : normalizeText(input.roleTitle),
+    active: input.active === undefined ? Boolean(Number(existingEmployee?.active ?? 1)) : parseBoolean(input.active),
+    notes: input.notes === undefined ? existingEmployee?.notes || null : normalizeText(input.notes)
+  };
+}
+
+function handleDuplicateEmployee(error) {
+  if (error.code === "ER_DUP_ENTRY") {
+    throw createError("Diese Mitarbeiternummer ist bereits vergeben.", 409);
+  }
+
+  throw error;
+}
+
+async function getEmployeeById(id) {
+  const [[row]] = await pool.execute(
+    `
+      SELECT
+        id,
+        employee_number AS employeeNumber,
+        first_name AS firstName,
+        last_name AS lastName,
+        CONCAT(first_name, ' ', last_name) AS name,
+        email,
+        phone,
+        role_title AS roleTitle,
+        active,
+        notes,
+        created_at AS createdAt
+      FROM employees
+      WHERE id = ?
+    `,
+    [id]
+  );
+  return row;
+}
+
+async function assertEmployeeExists(employeeId) {
+  if (!employeeId) {
+    return;
+  }
+
+  const [[employee]] = await pool.execute("SELECT id FROM employees WHERE id = ?", [employeeId]);
+  if (!employee) {
+    throw createError("Der ausgewählte Mitarbeiter existiert nicht.", 400);
+  }
+}
+
+async function createEmployee(input) {
+  const employee = normalizeEmployeeInput(input);
+
+  try {
+    const [result] = await pool.execute(
+      `
+        INSERT INTO employees (
+          employee_number,
+          first_name,
+          last_name,
+          email,
+          phone,
+          role_title,
+          active,
+          notes
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        employee.employeeNumber,
+        employee.firstName,
+        employee.lastName,
+        employee.email,
+        employee.phone,
+        employee.roleTitle,
+        employee.active,
+        employee.notes
+      ]
+    );
+
+    await pool.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('employee', ?, ?)",
+      [result.insertId, `Mitarbeiter "${employee.firstName} ${employee.lastName}" angelegt.`]
+    );
+
+    return getEmployeeById(result.insertId);
+  } catch (error) {
+    handleDuplicateEmployee(error);
+  }
+}
+
+async function updateEmployee(id, input) {
+  const existingEmployee = await getEmployeeById(id);
+  if (!existingEmployee) {
+    throw createError("Mitarbeiter nicht gefunden.", 404);
+  }
+
+  const employee = normalizeEmployeeInput(input, existingEmployee);
+
+  try {
+    await pool.execute(
+      `
+        UPDATE employees
+        SET
+          employee_number = ?,
+          first_name = ?,
+          last_name = ?,
+          email = ?,
+          phone = ?,
+          role_title = ?,
+          active = ?,
+          notes = ?
+        WHERE id = ?
+      `,
+      [
+        employee.employeeNumber,
+        employee.firstName,
+        employee.lastName,
+        employee.email,
+        employee.phone,
+        employee.roleTitle,
+        employee.active,
+        employee.notes,
+        id
+      ]
+    );
+
+    await pool.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('employee', ?, ?)",
+      [id, `Mitarbeiter "${employee.firstName} ${employee.lastName}" aktualisiert.`]
+    );
+
+    return getEmployeeById(id);
+  } catch (error) {
+    handleDuplicateEmployee(error);
+  }
+}
+
+async function deleteEmployee(id) {
+  const existingEmployee = await getEmployeeById(id);
+  if (!existingEmployee) {
+    throw createError("Mitarbeiter nicht gefunden.", 404);
+  }
+
+  await pool.execute("UPDATE maintenance_plans SET employee_id = NULL WHERE employee_id = ?", [id]);
+  await pool.execute("DELETE FROM employees WHERE id = ?", [id]);
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('employee', ?, ?)",
+    [id, `Mitarbeiter "${existingEmployee.name}" gelöscht.`]
   );
 
   return { deleted: true };
@@ -1714,6 +1933,8 @@ async function createMaintenancePlan(input) {
   const title = input.title?.trim();
   const targetType = input.targetType;
   const targetId = Number(input.targetId);
+  const parsedEmployeeId = Number(input.employeeId);
+  const employeeId = Number.isFinite(parsedEmployeeId) && parsedEmployeeId > 0 ? parsedEmployeeId : null;
   const intervalDays = Number(input.intervalDays);
 
   if (!title || !targetType || !targetId || !intervalDays || !input.nextDueOn) {
@@ -1725,17 +1946,19 @@ async function createMaintenancePlan(input) {
   }
 
   await assertMaintenanceTarget(targetType, targetId);
+  await assertEmployeeExists(employeeId);
 
   const assetId = targetType === "asset" ? targetId : null;
   const [result] = await pool.execute(
     `
-      INSERT INTO maintenance_plans (asset_id, target_type, target_id, title, interval_days, last_done_on, next_due_on)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO maintenance_plans (asset_id, target_type, target_id, employee_id, title, interval_days, last_done_on, next_due_on)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       assetId,
       targetType,
       targetId,
+      employeeId,
       title,
       intervalDays,
       input.lastDoneOn || null,
@@ -1776,6 +1999,8 @@ async function getMaintenancePlanById(id) {
         DATE_FORMAT(mp.next_due_on, '%Y-%m-%d') AS nextDueOn,
         mp.target_type AS targetType,
         mp.target_id AS targetId,
+        mp.employee_id AS employeeId,
+        CONCAT(employee.first_name, ' ', employee.last_name) AS employeeName,
         COALESCE(
           CASE
             WHEN mp.target_type = 'asset' THEN target_asset.name
@@ -1790,6 +2015,7 @@ async function getMaintenancePlanById(id) {
       LEFT JOIN buildings target_building ON mp.target_type = 'building' AND target_building.id = mp.target_id
       LEFT JOIN apartments apartment ON mp.target_type = 'apartment' AND apartment.id = mp.target_id
       LEFT JOIN buildings apartment_building ON apartment_building.id = apartment.building_id
+      LEFT JOIN employees employee ON employee.id = mp.employee_id
       WHERE mp.id = ?
     `,
     [id]
@@ -1827,6 +2053,8 @@ async function getCalendarEvents(startDate, endDate) {
         mp.interval_days AS intervalDays,
         mp.target_type AS targetType,
         mp.target_id AS targetId,
+        mp.employee_id AS employeeId,
+        CONCAT(employee.first_name, ' ', employee.last_name) AS employeeName,
         COALESCE(
           CASE
             WHEN mp.target_type = 'asset' THEN target_asset.name
@@ -1841,6 +2069,7 @@ async function getCalendarEvents(startDate, endDate) {
       LEFT JOIN buildings target_building ON mp.target_type = 'building' AND target_building.id = mp.target_id
       LEFT JOIN apartments apartment ON mp.target_type = 'apartment' AND apartment.id = mp.target_id
       LEFT JOIN buildings apartment_building ON apartment_building.id = apartment.building_id
+      LEFT JOIN employees employee ON employee.id = mp.employee_id
       WHERE mp.active = TRUE
         AND mp.next_due_on <= ?
       ORDER BY mp.next_due_on ASC, mp.title ASC
@@ -2251,6 +2480,10 @@ module.exports = {
   createUser,
   updateUser,
   deleteUser,
+  listEmployees,
+  createEmployee,
+  updateEmployee,
+  deleteEmployee,
   listCustomers,
   createCustomer,
   updateCustomer,
