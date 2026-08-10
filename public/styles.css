@@ -682,6 +682,25 @@ textarea {
   gap: 10px;
 }
 
+.asset-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(180px, 0.9fr) minmax(180px, 1fr) minmax(140px, 0.7fr);
+  gap: 12px;
+  margin: 4px 0 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fbfbf8;
+}
+
+.filter-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
 .list-item,
 .user-item,
 .timeline-item {
@@ -882,8 +901,14 @@ textarea {
   .kpi-grid,
   .form-grid,
   .billing-fields,
+  .asset-filter-bar,
   .users-layout {
     grid-template-columns: 1fr;
+  }
+
+  .filter-actions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .property-layout {

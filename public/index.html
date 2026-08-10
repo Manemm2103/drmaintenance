@@ -395,6 +395,36 @@
                 <button class="ghost-button" type="button" id="assetNewButton">Neu</button>
               </div>
             </form>
+            <div class="asset-filter-bar" aria-label="Wartungsobjekte filtern">
+              <label>
+                Suche
+                <input id="assetSearchInput" placeholder="Name, Typ, Standort, Seriennummer">
+              </label>
+              <label>
+                Kunde
+                <select id="assetCustomerFilter">
+                  <option value="">Alle Kunden</option>
+                </select>
+              </label>
+              <label>
+                Straße / Adresse
+                <input id="assetAddressFilterInput" placeholder="Straße, PLZ, Ort, Gebäude">
+              </label>
+              <label>
+                Kritikalität
+                <select id="assetCriticalityFilter">
+                  <option value="">Alle</option>
+                  <option value="critical">Kritisch</option>
+                  <option value="high">Hoch</option>
+                  <option value="medium">Mittel</option>
+                  <option value="low">Niedrig</option>
+                </select>
+              </label>
+              <div class="filter-actions">
+                <span id="assetResultCount" class="muted">0 Objekte</span>
+                <button class="ghost-button" type="button" id="assetFilterResetButton">Filter zurücksetzen</button>
+              </div>
+            </div>
             <div class="asset-list" id="assetList"></div>
           </article>
           </section>

@@ -607,8 +607,18 @@ async function getDashboardSummary() {
         WHEN a.building_id IS NOT NULL THEN asset_building.name
         ELSE NULL
       END AS assignmentLabel,
+      CASE
+        WHEN a.apartment_id IS NOT NULL THEN apartment_building.address
+        WHEN a.building_id IS NOT NULL THEN asset_building.address
+        ELSE NULL
+      END AS buildingAddress,
+      COALESCE(apartment_customer.id, inherited_customer.id, building_customer.id) AS customerId,
       COALESCE(apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number) AS customerNumber,
       COALESCE(apartment_customer.name, inherited_customer.name, building_customer.name) AS customerName,
+      COALESCE(apartment_customer.street, inherited_customer.street, building_customer.street) AS customerStreet,
+      COALESCE(apartment_customer.house_number, inherited_customer.house_number, building_customer.house_number) AS customerHouseNumber,
+      COALESCE(apartment_customer.postal_code, inherited_customer.postal_code, building_customer.postal_code) AS customerPostalCode,
+      COALESCE(apartment_customer.city, inherited_customer.city, building_customer.city) AS customerCity,
       a.name,
       a.asset_type AS assetType,
       a.location,
@@ -1787,6 +1797,25 @@ async function getMaintenancePlanById(id) {
   return plan;
 }
 
+function parseDateKey(value) {
+  const [year, month, day] = String(value).slice(0, 10).split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+}
+
+function formatDateKey(date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(date, days) {
+  const nextDate = new Date(date);
+  nextDate.setUTCDate(nextDate.getUTCDate() + days);
+  return nextDate;
+}
+
+function daysBetween(start, end) {
+  return Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
+}
+
 async function getCalendarEvents(startDate, endDate) {
   const [rows] = await pool.execute(
     `
@@ -1813,13 +1842,59 @@ async function getCalendarEvents(startDate, endDate) {
       LEFT JOIN apartments apartment ON mp.target_type = 'apartment' AND apartment.id = mp.target_id
       LEFT JOIN buildings apartment_building ON apartment_building.id = apartment.building_id
       WHERE mp.active = TRUE
-        AND mp.next_due_on BETWEEN ? AND ?
+        AND mp.next_due_on <= ?
       ORDER BY mp.next_due_on ASC, mp.title ASC
     `,
-    [startDate, endDate]
+    [endDate]
   );
 
-  return rows;
+  const rangeStart = parseDateKey(startDate);
+  const rangeEnd = parseDateKey(endDate);
+  const events = [];
+
+  for (const row of rows) {
+    const intervalDays = Number(row.intervalDays);
+    let dueDate = parseDateKey(row.dueDate);
+
+    if (intervalDays > 0 && dueDate < rangeStart) {
+      const missedIntervals = Math.floor(daysBetween(dueDate, rangeStart) / intervalDays);
+      dueDate = addDays(dueDate, missedIntervals * intervalDays);
+      while (dueDate < rangeStart) {
+        dueDate = addDays(dueDate, intervalDays);
+      }
+    }
+
+    let occurrenceIndex = 0;
+    while (dueDate <= rangeEnd) {
+      const dueDateKey = formatDateKey(dueDate);
+      if (dueDate >= rangeStart) {
+        events.push({
+          ...row,
+          id: `${row.id}:${dueDateKey}`,
+          planId: row.id,
+          dueDate: dueDateKey,
+          generated: dueDateKey !== row.dueDate,
+          occurrenceIndex
+        });
+      }
+
+      if (!intervalDays || intervalDays < 1) {
+        break;
+      }
+
+      dueDate = addDays(dueDate, intervalDays);
+      occurrenceIndex += 1;
+
+      if (occurrenceIndex > 370) {
+        break;
+      }
+    }
+  }
+
+  return events.sort((left, right) => (
+    left.dueDate.localeCompare(right.dueDate)
+    || left.title.localeCompare(right.title, "de")
+  ));
 }
 
 async function listAssets() {
@@ -1839,8 +1914,18 @@ async function listAssets() {
         WHEN a.building_id IS NOT NULL THEN asset_building.name
         ELSE NULL
       END AS assignmentLabel,
+      CASE
+        WHEN a.apartment_id IS NOT NULL THEN apartment_building.address
+        WHEN a.building_id IS NOT NULL THEN asset_building.address
+        ELSE NULL
+      END AS buildingAddress,
+      COALESCE(apartment_customer.id, inherited_customer.id, building_customer.id) AS customerId,
       COALESCE(apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number) AS customerNumber,
       COALESCE(apartment_customer.name, inherited_customer.name, building_customer.name) AS customerName,
+      COALESCE(apartment_customer.street, inherited_customer.street, building_customer.street) AS customerStreet,
+      COALESCE(apartment_customer.house_number, inherited_customer.house_number, building_customer.house_number) AS customerHouseNumber,
+      COALESCE(apartment_customer.postal_code, inherited_customer.postal_code, building_customer.postal_code) AS customerPostalCode,
+      COALESCE(apartment_customer.city, inherited_customer.city, building_customer.city) AS customerCity,
       a.name,
       a.asset_type AS assetType,
       a.location,
@@ -1984,8 +2069,18 @@ async function getAssetById(id) {
           WHEN a.building_id IS NOT NULL THEN asset_building.name
           ELSE NULL
         END AS assignmentLabel,
+        CASE
+          WHEN a.apartment_id IS NOT NULL THEN apartment_building.address
+          WHEN a.building_id IS NOT NULL THEN asset_building.address
+          ELSE NULL
+        END AS buildingAddress,
+        COALESCE(apartment_customer.id, inherited_customer.id, building_customer.id) AS customerId,
         COALESCE(apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number) AS customerNumber,
         COALESCE(apartment_customer.name, inherited_customer.name, building_customer.name) AS customerName,
+        COALESCE(apartment_customer.street, inherited_customer.street, building_customer.street) AS customerStreet,
+        COALESCE(apartment_customer.house_number, inherited_customer.house_number, building_customer.house_number) AS customerHouseNumber,
+        COALESCE(apartment_customer.postal_code, inherited_customer.postal_code, building_customer.postal_code) AS customerPostalCode,
+        COALESCE(apartment_customer.city, inherited_customer.city, building_customer.city) AS customerCity,
         a.name,
         a.asset_type AS assetType,
         a.location,

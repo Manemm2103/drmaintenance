@@ -16,6 +16,12 @@ const els = {
   customerCount: document.querySelector("#customerCount"),
   workOrderRows: document.querySelector("#workOrderRows"),
   assetList: document.querySelector("#assetList"),
+  assetSearchInput: document.querySelector("#assetSearchInput"),
+  assetCustomerFilter: document.querySelector("#assetCustomerFilter"),
+  assetAddressFilterInput: document.querySelector("#assetAddressFilterInput"),
+  assetCriticalityFilter: document.querySelector("#assetCriticalityFilter"),
+  assetFilterResetButton: document.querySelector("#assetFilterResetButton"),
+  assetResultCount: document.querySelector("#assetResultCount"),
   planList: document.querySelector("#planList"),
   activityList: document.querySelector("#activityList"),
   customerList: document.querySelector("#customerList"),
@@ -549,6 +555,7 @@ function renderSummary(payload) {
   els.customerCount.textContent = summary.customerCount;
 
   renderWorkOrders(workOrders);
+  renderAssetCustomerFilterOptions(customers);
   renderAssets(assets);
   renderPlans(plans);
   renderActivity(activity);
@@ -584,19 +591,84 @@ function renderWorkOrders(workOrders) {
   `).join("");
 }
 
-function renderAssets(assets) {
+function getAssetAddressLabel(asset) {
+  return formatAddressLabel(asset.customerStreet, asset.customerHouseNumber, asset.customerPostalCode, asset.customerCity);
+}
+
+function getAssetSearchText(asset) {
+  return [
+    asset.name,
+    asset.assetType,
+    asset.location,
+    asset.serialNumber,
+    asset.criticality,
+    asset.assignmentLabel,
+    asset.buildingAddress,
+    asset.customerNumber,
+    asset.customerName,
+    asset.customerStreet,
+    asset.customerHouseNumber,
+    asset.customerPostalCode,
+    asset.customerCity
+  ].filter(Boolean).join(" ");
+}
+
+function getFilteredAssets(assets) {
+  const search = normalizeSearchValue(els.assetSearchInput.value);
+  const customerId = els.assetCustomerFilter.value;
+  const address = normalizeSearchValue(els.assetAddressFilterInput.value);
+  const criticality = els.assetCriticalityFilter.value;
+
+  return (assets || []).filter((asset) => {
+    const searchText = normalizeSearchValue(getAssetSearchText(asset));
+    const addressText = normalizeSearchValue([
+      asset.assignmentLabel,
+      asset.buildingAddress,
+      asset.customerStreet,
+      asset.customerHouseNumber,
+      asset.customerPostalCode,
+      asset.customerCity,
+      asset.location
+    ].filter(Boolean).join(" "));
+
+    return (!search || searchText.includes(search))
+      && (!customerId || String(asset.customerId || "") === customerId)
+      && (!address || addressText.includes(address))
+      && (!criticality || asset.criticality === criticality);
+  });
+}
+
+function renderAssetCustomerFilterOptions(customers) {
+  const currentValue = els.assetCustomerFilter.value;
+  els.assetCustomerFilter.innerHTML = '<option value="">Alle Kunden</option>' + (customers || []).map((customer) => (
+    `<option value="${customer.id}">${escapeHtml(formatCustomerLabel(customer.customerNumber, customer.name))}</option>`
+  )).join("");
+  els.assetCustomerFilter.value = currentValue;
+}
+
+function renderAssets(assets = latestAssets) {
   if (!assets || assets.length === 0) {
     els.assetList.innerHTML = '<div class="list-item">Keine Wartungsobjekte angelegt.</div>';
+    els.assetResultCount.textContent = "0 Objekte";
     return;
   }
 
-  els.assetList.innerHTML = assets.map((asset) => `
+  const filteredAssets = getFilteredAssets(assets);
+  els.assetResultCount.textContent = `${filteredAssets.length} von ${assets.length} Objekten`;
+
+  if (filteredAssets.length === 0) {
+    els.assetList.innerHTML = '<div class="list-item">Keine Wartungsobjekte für diesen Filter.</div>';
+    return;
+  }
+
+  els.assetList.innerHTML = filteredAssets.map((asset) => `
     <div class="list-item list-item-with-actions clickable-list-item" role="button" tabindex="0" data-edit-asset="${asset.id}" title="Wartungsobjekt bearbeiten">
       <div>
         <strong>${escapeHtml(asset.name)}</strong>
         <div class="list-meta">
           <span>${escapeHtml(formatCustomerLabel(asset.customerNumber, asset.customerName))}</span>
           <span>${escapeHtml(asset.assignmentLabel || "Keine Zuordnung")}</span>
+          <span>${escapeHtml(asset.buildingAddress || getAssetAddressLabel(asset) || "Keine Adresse")}</span>
           <span>${escapeHtml(asset.assetType)}</span>
           <span>${escapeHtml(asset.location)}</span>
           <span>${priorityLabels[asset.criticality] || asset.criticality}</span>
@@ -781,7 +853,7 @@ function renderCalendar(events) {
         ${dayEvents.slice(0, 3).map((event) => `
           <span class="calendar-event" title="${escapeHtml(event.title)}">
             ${escapeHtml(event.title)}
-            <small>${escapeHtml(event.targetName || "Kein Objekt")}</small>
+            <small>${escapeHtml([event.targetName || "Kein Objekt", event.intervalDays ? `alle ${event.intervalDays} Tage` : ""].filter(Boolean).join(" - "))}</small>
           </span>
         `).join("")}
         ${dayEvents.length > 3 ? `<span class="muted">+${dayEvents.length - 3} weitere</span>` : ""}
@@ -1184,6 +1256,18 @@ function bindEvents() {
   els.refreshButton.addEventListener("click", loadDashboard);
   els.logoutButton.addEventListener("click", () => {
     logout().catch((error) => showToast(error.message));
+  });
+
+  els.assetSearchInput.addEventListener("input", () => renderAssets(latestAssets));
+  els.assetAddressFilterInput.addEventListener("input", () => renderAssets(latestAssets));
+  els.assetCustomerFilter.addEventListener("change", () => renderAssets(latestAssets));
+  els.assetCriticalityFilter.addEventListener("change", () => renderAssets(latestAssets));
+  els.assetFilterResetButton.addEventListener("click", () => {
+    els.assetSearchInput.value = "";
+    els.assetAddressFilterInput.value = "";
+    els.assetCustomerFilter.value = "";
+    els.assetCriticalityFilter.value = "";
+    renderAssets(latestAssets);
   });
 
   els.prevMonthButton.addEventListener("click", () => {
