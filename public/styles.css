@@ -593,6 +593,64 @@ textarea:focus {
   border-color: #050505;
 }
 
+.native-search-select {
+  display: none;
+}
+
+.searchable-select {
+  position: relative;
+  min-width: 0;
+}
+
+.searchable-select.is-open .searchable-input {
+  border-color: #050505;
+}
+
+.searchable-options {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #ffffff;
+  box-shadow: var(--shadow);
+}
+
+.searchable-option {
+  display: block;
+  width: 100%;
+  min-height: 38px;
+  padding: 9px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: #ffffff;
+  color: var(--text);
+  text-align: left;
+}
+
+.searchable-option:last-child {
+  border-bottom: 0;
+}
+
+.searchable-option:hover,
+.searchable-option.is-active {
+  background: var(--panel-soft);
+}
+
+.searchable-option.is-empty,
+.searchable-empty {
+  color: var(--muted);
+}
+
+.searchable-empty {
+  padding: 10px 12px;
+}
+
 .check-row input[type="checkbox"] {
   width: 18px;
   height: 18px;

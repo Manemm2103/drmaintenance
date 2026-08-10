@@ -153,6 +153,7 @@ let visibleMonth = startOfMonth(new Date());
 let latestAssets = [];
 let latestProperties = [];
 let latestCustomers = [];
+const searchableSelects = new Map();
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
@@ -217,6 +218,254 @@ function showToast(message) {
   els.toast.textContent = message;
   els.toast.classList.add("show");
   window.setTimeout(() => els.toast.classList.remove("show"), 2400);
+}
+
+function normalizeSearchValue(value) {
+  return String(value || "")
+    .toLocaleLowerCase("de-DE")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function createSearchableSelect(select) {
+  if (!select || searchableSelects.has(select)) {
+    return;
+  }
+
+  const required = select.required;
+  select.required = false;
+  select.classList.add("native-search-select");
+
+  const wrapper = document.createElement("div");
+  wrapper.className = "searchable-select";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "searchable-input";
+  input.autocomplete = "off";
+  input.placeholder = select.options[0]?.textContent?.trim() || "Suchen";
+  input.required = required;
+  input.setAttribute("role", "combobox");
+  input.setAttribute("aria-autocomplete", "list");
+  input.setAttribute("aria-expanded", "false");
+
+  const list = document.createElement("div");
+  list.className = "searchable-options";
+  list.hidden = true;
+  list.setAttribute("role", "listbox");
+
+  wrapper.append(input, list);
+  select.insertAdjacentElement("afterend", wrapper);
+
+  const state = {
+    activeIndex: -1,
+    filtered: [],
+    input,
+    list,
+    options: [],
+    required,
+    select,
+    wrapper
+  };
+  searchableSelects.set(select, state);
+
+  input.addEventListener("focus", () => openSearchableSelect(select));
+  input.addEventListener("input", () => {
+    const exactOption = findExactSearchableOption(state, input.value);
+    select.value = exactOption ? exactOption.value : "";
+    renderSearchableOptions(select);
+  });
+  input.addEventListener("keydown", (event) => handleSearchableKeydown(event, select));
+  input.addEventListener("blur", () => {
+    window.setTimeout(() => closeSearchableSelect(select), 120);
+  });
+
+  list.addEventListener("mousedown", (event) => event.preventDefault());
+  list.addEventListener("click", (event) => {
+    const optionButton = event.target.closest("[data-search-option]");
+    if (!optionButton) {
+      return;
+    }
+
+    selectSearchableOption(select, state.filtered[Number(optionButton.dataset.searchOption)]);
+  });
+
+  refreshSearchableSelect(select);
+}
+
+function initializeSearchableSelects() {
+  [
+    els.assetSelect,
+    els.assetPropertyTargetSelect,
+    els.apartmentBuildingSelect,
+    els.buildingCustomerSelect,
+    els.apartmentCustomerSelect,
+    els.maintenanceTargetSelect
+  ].forEach(createSearchableSelect);
+}
+
+function refreshSearchableSelect(select) {
+  const state = searchableSelects.get(select);
+  if (!state) {
+    return;
+  }
+
+  state.options = Array.from(select.options)
+    .filter((option) => !option.disabled)
+    .map((option) => ({
+      label: option.textContent.trim(),
+      value: option.value
+    }));
+  syncSearchableSelect(select);
+}
+
+function syncSearchableSelect(select) {
+  const state = searchableSelects.get(select);
+  if (!state) {
+    return;
+  }
+
+  const selectedOption = state.options.find((option) => option.value === select.value);
+  state.input.value = selectedOption?.value ? selectedOption.label : "";
+  renderSearchableOptions(select);
+}
+
+function findExactSearchableOption(state, value) {
+  const query = normalizeSearchValue(value.trim());
+  if (!query) {
+    return null;
+  }
+
+  return state.options.find((option) => option.value && normalizeSearchValue(option.label) === query) || null;
+}
+
+function getFilteredSearchableOptions(state) {
+  const query = normalizeSearchValue(state.input.value.trim());
+  if (!query) {
+    return state.options.slice(0, 60);
+  }
+
+  return state.options
+    .filter((option) => option.value && (
+      normalizeSearchValue(option.label).includes(query)
+      || normalizeSearchValue(option.value).includes(query)
+    ))
+    .slice(0, 60);
+}
+
+function renderSearchableOptions(select) {
+  const state = searchableSelects.get(select);
+  if (!state) {
+    return;
+  }
+
+  state.filtered = getFilteredSearchableOptions(state);
+  state.activeIndex = state.filtered.length > 0 ? Math.min(Math.max(state.activeIndex, 0), state.filtered.length - 1) : -1;
+
+  if (state.filtered.length === 0) {
+    state.list.innerHTML = '<div class="searchable-empty">Keine Treffer</div>';
+    return;
+  }
+
+  state.list.innerHTML = state.filtered.map((option, index) => `
+    <button
+      class="searchable-option ${index === state.activeIndex ? "is-active" : ""} ${option.value ? "" : "is-empty"}"
+      type="button"
+      role="option"
+      data-search-option="${index}"
+    >
+      ${escapeHtml(option.label)}
+    </button>
+  `).join("");
+}
+
+function openSearchableSelect(select) {
+  const state = searchableSelects.get(select);
+  if (!state) {
+    return;
+  }
+
+  renderSearchableOptions(select);
+  state.list.hidden = false;
+  state.wrapper.classList.add("is-open");
+  state.input.setAttribute("aria-expanded", "true");
+}
+
+function closeSearchableSelect(select) {
+  const state = searchableSelects.get(select);
+  if (!state) {
+    return;
+  }
+
+  state.list.hidden = true;
+  state.wrapper.classList.remove("is-open");
+  state.input.setAttribute("aria-expanded", "false");
+}
+
+function selectSearchableOption(select, option) {
+  const state = searchableSelects.get(select);
+  if (!state || !option) {
+    return;
+  }
+
+  select.value = option.value;
+  state.input.value = option.value ? option.label : "";
+  closeSearchableSelect(select);
+  select.dispatchEvent(new Event("change", { bubbles: true }));
+}
+
+function handleSearchableKeydown(event, select) {
+  const state = searchableSelects.get(select);
+  if (!state) {
+    return;
+  }
+
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    openSearchableSelect(select);
+    const direction = event.key === "ArrowDown" ? 1 : -1;
+    const maxIndex = state.filtered.length - 1;
+    state.activeIndex = Math.min(Math.max(state.activeIndex + direction, 0), maxIndex);
+    renderSearchableOptions(select);
+    return;
+  }
+
+  if (event.key === "Enter" && !state.list.hidden && state.activeIndex >= 0) {
+    event.preventDefault();
+    selectSearchableOption(select, state.filtered[state.activeIndex]);
+    return;
+  }
+
+  if (event.key === "Escape") {
+    closeSearchableSelect(select);
+  }
+}
+
+function validateSearchableSelect(select, message) {
+  const state = searchableSelects.get(select);
+  if (!state) {
+    return true;
+  }
+
+  const exactOption = findExactSearchableOption(state, state.input.value);
+  if (exactOption) {
+    select.value = exactOption.value;
+    syncSearchableSelect(select);
+    return true;
+  }
+
+  if (select.value) {
+    return true;
+  }
+
+  if (!state.input.value.trim() && !state.required) {
+    return true;
+  }
+
+  showToast(message || "Bitte einen Eintrag aus der Liste auswählen.");
+  state.input.focus();
+  openSearchableSelect(select);
+  return false;
 }
 
 function scrollToTarget(targetId) {
@@ -558,6 +807,7 @@ function renderAssetOptions(assets) {
     `<option value="${asset.id}">${escapeHtml(asset.name)}</option>`
   )).join("");
   els.assetSelect.value = currentValue;
+  refreshSearchableSelect(els.assetSelect);
 }
 
 function renderCustomerOptions(customers) {
@@ -571,6 +821,8 @@ function renderCustomerOptions(customers) {
   els.apartmentCustomerSelect.innerHTML = '<option value="">Wie Gebäude / kein Kunde</option>' + options;
   els.buildingCustomerSelect.value = buildingValue;
   els.apartmentCustomerSelect.value = apartmentValue;
+  refreshSearchableSelect(els.buildingCustomerSelect);
+  refreshSearchableSelect(els.apartmentCustomerSelect);
 }
 
 function renderApartmentBuildingOptions(properties) {
@@ -579,6 +831,7 @@ function renderApartmentBuildingOptions(properties) {
     `<option value="${building.id}">${escapeHtml(building.name)}${building.customerNumber ? ` - ${escapeHtml(building.customerNumber)}` : ""}</option>`
   )).join("");
   els.apartmentBuildingSelect.value = currentValue;
+  refreshSearchableSelect(els.apartmentBuildingSelect);
 }
 
 function renderAssetAssignmentOptions(properties) {
@@ -599,6 +852,7 @@ function renderAssetAssignmentOptions(properties) {
 
   els.assetPropertyTargetSelect.innerHTML = '<option value="">Noch nicht zugewiesen</option>' + options.join("");
   els.assetPropertyTargetSelect.value = currentValue;
+  refreshSearchableSelect(els.assetPropertyTargetSelect);
 }
 
 function renderMaintenanceTargetOptions(targets) {
@@ -607,6 +861,7 @@ function renderMaintenanceTargetOptions(targets) {
     `<option value="${target.targetType}:${target.targetId}">${escapeHtml(target.label)} - ${escapeHtml(target.subtitle || "")}</option>`
   )).join("");
   els.maintenanceTargetSelect.value = currentValue;
+  refreshSearchableSelect(els.maintenanceTargetSelect);
 }
 
 function getAssetFormPayload() {
@@ -625,6 +880,7 @@ function getAssetFormPayload() {
 function resetAssetForm() {
   els.assetForm.reset();
   els.assetIdInput.value = "";
+  syncSearchableSelect(els.assetPropertyTargetSelect);
   els.assetSubmitButton.textContent = "Objekt speichern";
 }
 
@@ -638,6 +894,7 @@ function loadAssetIntoForm(asset) {
   els.assetForm.elements.propertyTarget.value = asset.assignmentType && asset.assignmentId
     ? `${asset.assignmentType}:${asset.assignmentId}`
     : "";
+  syncSearchableSelect(els.assetPropertyTargetSelect);
   els.assetSubmitButton.textContent = "Änderungen speichern";
   setView("wartungsobjekte", { updateHash: true, scrollTop: false });
   window.setTimeout(() => scrollToTarget("assetForm"), 0);
@@ -734,6 +991,7 @@ function findApartmentById(id) {
 function resetBuildingForm() {
   els.buildingForm.reset();
   els.buildingIdInput.value = "";
+  syncSearchableSelect(els.buildingCustomerSelect);
   els.buildingSubmitButton.textContent = "Gebäude speichern";
 }
 
@@ -743,6 +1001,7 @@ function loadBuildingIntoForm(building) {
   els.buildingForm.elements.name.value = building.name || "";
   els.buildingForm.elements.buildingType.value = building.buildingType || "private_house";
   els.buildingForm.elements.address.value = building.address || "";
+  syncSearchableSelect(els.buildingCustomerSelect);
   els.buildingSubmitButton.textContent = "Änderungen speichern";
   setView("gebaeude", { updateHash: true, scrollTop: false });
   window.setTimeout(() => scrollToTarget("buildingForm"), 0);
@@ -751,6 +1010,8 @@ function loadBuildingIntoForm(building) {
 function resetApartmentForm() {
   els.apartmentForm.reset();
   els.apartmentIdInput.value = "";
+  syncSearchableSelect(els.apartmentBuildingSelect);
+  syncSearchableSelect(els.apartmentCustomerSelect);
   els.apartmentSubmitButton.textContent = "Appartment speichern";
 }
 
@@ -761,6 +1022,8 @@ function loadApartmentIntoForm(apartment) {
   els.apartmentForm.elements.apartmentNumber.value = apartment.apartmentNumber || "";
   els.apartmentForm.elements.name.value = apartment.name || "";
   els.apartmentForm.elements.floor.value = apartment.floor || "";
+  syncSearchableSelect(els.apartmentBuildingSelect);
+  syncSearchableSelect(els.apartmentCustomerSelect);
   els.apartmentSubmitButton.textContent = "Änderungen speichern";
   setView("gebaeude", { updateHash: true, scrollTop: false });
   window.setTimeout(() => scrollToTarget("apartmentForm"), 0);
@@ -1086,6 +1349,10 @@ function bindEvents() {
 
   els.workOrderForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!validateSearchableSelect(els.assetSelect, "Bitte ein Objekt aus der Liste auswählen oder das Feld leeren.")) {
+      return;
+    }
+
     const data = Object.fromEntries(new FormData(els.workOrderForm));
 
     await api("/api/work-orders", {
@@ -1100,12 +1367,17 @@ function bindEvents() {
     });
 
     els.workOrderForm.reset();
+    syncSearchableSelect(els.assetSelect);
     showToast("Auftrag gespeichert.");
     await loadDashboard();
   });
 
   els.maintenanceForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!validateSearchableSelect(els.maintenanceTargetSelect, "Bitte ein Wartungsobjekt aus der Liste auswählen.")) {
+      return;
+    }
+
     const data = Object.fromEntries(new FormData(els.maintenanceForm));
     const target = parseTargetValue(data.target);
 
@@ -1121,12 +1393,17 @@ function bindEvents() {
     });
 
     els.maintenanceForm.reset();
+    syncSearchableSelect(els.maintenanceTargetSelect);
     showToast("Wartungsplan gespeichert.");
     await loadDashboard();
   });
 
   els.assetForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!validateSearchableSelect(els.assetPropertyTargetSelect, "Bitte eine Zuordnung aus der Liste auswählen oder das Feld leeren.")) {
+      return;
+    }
+
     const data = getAssetFormPayload();
     const isUpdate = Boolean(data.id);
 
@@ -1187,6 +1464,10 @@ function bindEvents() {
 
   els.buildingForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!validateSearchableSelect(els.buildingCustomerSelect, "Bitte einen Kunden aus der Liste auswählen oder das Feld leeren.")) {
+      return;
+    }
+
     const data = Object.fromEntries(new FormData(els.buildingForm));
     const isUpdate = Boolean(data.buildingId);
 
@@ -1207,6 +1488,14 @@ function bindEvents() {
 
   els.apartmentForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!validateSearchableSelect(els.apartmentBuildingSelect, "Bitte ein Gebäude aus der Liste auswählen.")) {
+      return;
+    }
+
+    if (!validateSearchableSelect(els.apartmentCustomerSelect, "Bitte einen Kunden aus der Liste auswählen oder das Feld leeren.")) {
+      return;
+    }
+
     const data = Object.fromEntries(new FormData(els.apartmentForm));
     const isUpdate = Boolean(data.apartmentId);
 
@@ -1250,6 +1539,7 @@ function bindEvents() {
   });
 }
 
+initializeSearchableSelects();
 syncBillingAddressFields();
 bindEvents();
 showViewFromHash();
