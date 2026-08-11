@@ -43,7 +43,7 @@ Der Workflow startet bei einem Kunden. Beim Anlegen vergibt DR Maintenance autom
 
 Verknüpfte Felder wie Kunde, Gebäude, Objekt-Zuordnung und Wartungsobjekt sind als durchsuchbare Auswahlfelder umgesetzt. Beim Tippen wird die Ergebnisliste live eingeschränkt; gespeichert wird weiterhin die eindeutige interne ID.
 
-Die Wartungsobjektliste kann nach Freitext, Kunde, Straße/Adresse und Kritikalität gefiltert werden. Wartungspläne werden direkt auf ein Wartungsobjekt gelegt und können einen HTML-Arbeitstext mit Bildern enthalten. Der Kalender zeigt aus einem Wartungsplan nicht nur die nächste Fälligkeit, sondern auch die folgenden rechnerischen Termine im sichtbaren Zeitraum anhand des hinterlegten Intervalls.
+Die Wartungsobjektliste kann nach Freitext, Kunde, Straße/Adresse und Kritikalität gefiltert werden. Wartungspläne werden direkt auf ein Wartungsobjekt gelegt, können bearbeitet werden und können einen HTML-Arbeitstext mit Bildern enthalten. Der Kalender zeigt aus einem Wartungsplan nicht nur die nächste Fälligkeit, sondern auch die folgenden rechnerischen Termine im sichtbaren Zeitraum anhand des hinterlegten Intervalls. Wenn Termine auf gesperrte Wochentage, bereits belegte Tage oder direkt benachbarte Wartungstage fallen, werden sie auf den nächsten erlaubten freien Tag verschoben.
 
 ## Container
 
@@ -94,7 +94,7 @@ Die Wartungsobjektliste kann nach Freitext, Kunde, Straße/Adresse und Kritikali
 
 ## Versionierung
 
-Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.10.12`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
+Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.11.01`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
 
 ## Nächste sinnvolle Schritte
 
