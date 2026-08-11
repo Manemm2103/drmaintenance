@@ -881,6 +881,67 @@ textarea {
   font-size: 0.8rem;
 }
 
+.work-order-list,
+.check-list,
+.asset-detail-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.work-order-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fbfbf8;
+}
+
+.work-order-card.is-overdue {
+  border-color: var(--text);
+  box-shadow: inset 4px 0 0 var(--text);
+}
+
+.detail-empty {
+  padding: 14px;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: #fbfbf8;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.check-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #ffffff;
+  color: var(--text);
+}
+
+.check-item input {
+  width: 18px;
+  height: 18px;
+}
+
+.asset-detail-panel {
+  margin: 2px 0 18px;
+}
+
+.asset-detail-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.asset-detail-grid h3 {
+  margin: 0 0 10px;
+  font-size: 0.95rem;
+}
+
 .toast {
   position: fixed;
   right: 18px;
@@ -958,6 +1019,7 @@ textarea {
   .billing-fields,
   .weekday-fields,
   .asset-filter-bar,
+  .asset-detail-grid,
   .users-layout,
   .property-forms {
     grid-template-columns: 1fr;

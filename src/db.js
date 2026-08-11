@@ -130,12 +130,15 @@ async function runMigrations() {
       asset_type VARCHAR(120) NOT NULL,
       location VARCHAR(160) NOT NULL,
       serial_number VARCHAR(120) NULL,
+      qr_code VARCHAR(120) NULL,
       criticality ENUM('low', 'medium', 'high', 'critical') NOT NULL DEFAULT 'medium',
+      instructions_html MEDIUMTEXT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       INDEX idx_assets_building (building_id),
       INDEX idx_assets_apartment (apartment_id),
       INDEX idx_assets_location (location),
+      UNIQUE KEY uq_assets_qr_code (qr_code),
       INDEX idx_assets_criticality (criticality)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
@@ -193,8 +196,11 @@ async function runMigrations() {
   await pool.query("ALTER TABLE apartments ADD INDEX IF NOT EXISTS idx_apartments_customer (customer_id)");
   await pool.query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS building_id INT NULL AFTER id");
   await pool.query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS apartment_id INT NULL AFTER building_id");
+  await pool.query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS qr_code VARCHAR(120) NULL AFTER serial_number");
+  await pool.query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS instructions_html MEDIUMTEXT NULL AFTER criticality");
   await pool.query("ALTER TABLE assets ADD INDEX IF NOT EXISTS idx_assets_building (building_id)");
   await pool.query("ALTER TABLE assets ADD INDEX IF NOT EXISTS idx_assets_apartment (apartment_id)");
+  await pool.query("ALTER TABLE assets ADD UNIQUE INDEX IF NOT EXISTS uq_assets_qr_code (qr_code)");
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS employee_functions (
@@ -263,6 +269,19 @@ async function runMigrations() {
   await pool.query("UPDATE maintenance_plans SET target_type = 'asset', target_id = asset_id WHERE target_type IS NULL AND asset_id IS NOT NULL");
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS asset_checks (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      asset_id INT NOT NULL,
+      label VARCHAR(180) NOT NULL,
+      sort_order INT NOT NULL DEFAULT 0,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT fk_asset_checks_asset FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE CASCADE,
+      INDEX idx_asset_checks_asset (asset_id),
+      INDEX idx_asset_checks_sort (asset_id, sort_order, id)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS work_orders (
       id INT AUTO_INCREMENT PRIMARY KEY,
       asset_id INT NULL,
@@ -278,6 +297,23 @@ async function runMigrations() {
       INDEX idx_work_orders_status (status),
       INDEX idx_work_orders_due (due_date),
       INDEX idx_work_orders_priority (priority)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS work_order_checks (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      work_order_id INT NOT NULL,
+      asset_check_id INT NULL,
+      label VARCHAR(180) NOT NULL,
+      checked BOOLEAN NOT NULL DEFAULT FALSE,
+      completed_at TIMESTAMP NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      CONSTRAINT fk_work_order_checks_order FOREIGN KEY (work_order_id) REFERENCES work_orders(id) ON DELETE CASCADE,
+      UNIQUE KEY uq_work_order_asset_check (work_order_id, asset_check_id),
+      INDEX idx_work_order_checks_order (work_order_id),
+      INDEX idx_work_order_checks_asset_check (asset_check_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
@@ -686,6 +722,10 @@ async function normalizeGermanText() {
     ["assets", "name"],
     ["assets", "asset_type"],
     ["assets", "location"],
+    ["assets", "qr_code"],
+    ["assets", "instructions_html"],
+    ["asset_checks", "label"],
+    ["work_order_checks", "label"],
     ["employees", "first_name"],
     ["employees", "last_name"],
     ["employees", "role_title"],
@@ -739,7 +779,7 @@ async function getDashboardSummary() {
       wo.description,
       wo.priority,
       wo.status,
-      wo.due_date AS dueDate,
+      DATE_FORMAT(wo.due_date, '%Y-%m-%d') AS dueDate,
       a.name AS assetName,
       a.location AS location
     FROM work_orders wo
@@ -838,6 +878,8 @@ async function getDashboardSummary() {
       a.asset_type AS assetType,
       a.location,
       a.serial_number AS serialNumber,
+      a.qr_code AS qrCode,
+      a.instructions_html AS instructionsHtml,
       a.criticality
     FROM assets a
     LEFT JOIN buildings asset_building ON asset_building.id = a.building_id
@@ -3115,6 +3157,8 @@ async function listAssets() {
       a.asset_type AS assetType,
       a.location,
       a.serial_number AS serialNumber,
+      a.qr_code AS qrCode,
+      a.instructions_html AS instructionsHtml,
       a.criticality
     FROM assets a
     LEFT JOIN buildings asset_building ON asset_building.id = a.building_id
@@ -3170,6 +3214,8 @@ function normalizeAssetInput(input) {
   const assetType = input.assetType?.trim();
   const location = input.location?.trim();
   const serialNumber = input.serialNumber?.trim() || null;
+  const qrCode = input.qrCode?.trim() || null;
+  const instructionsHtml = normalizeText(input.instructionsHtml);
   const criticality = input.criticality || "medium";
   const assignment = parseAssetAssignment(input);
   const allowedCriticalities = new Set(["low", "medium", "high", "critical"]);
@@ -3188,8 +3234,18 @@ function normalizeAssetInput(input) {
     assetType,
     location,
     serialNumber,
+    qrCode,
+    instructionsHtml,
     criticality
   };
+}
+
+function handleDuplicateAsset(error) {
+  if (error.code === "ER_DUP_ENTRY") {
+    throw createError("Dieser QR-Code ist bereits mit einem anderen Wartungsobjekt verknüpft.", 409);
+  }
+
+  throw error;
 }
 
 async function assertAssetAssignment(asset) {
@@ -3224,21 +3280,28 @@ async function createAsset(input) {
   const asset = normalizeAssetInput(input);
   await assertAssetAssignment(asset);
 
-  const [result] = await pool.execute(
-    `
-      INSERT INTO assets (building_id, apartment_id, name, asset_type, location, serial_number, criticality)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `,
-    [
-      asset.buildingId,
-      asset.apartmentId,
-      asset.name,
-      asset.assetType,
-      asset.location,
-      asset.serialNumber,
-      asset.criticality
-    ]
-  );
+  let result;
+  try {
+    [result] = await pool.execute(
+      `
+        INSERT INTO assets (building_id, apartment_id, name, asset_type, location, serial_number, qr_code, criticality, instructions_html)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      [
+        asset.buildingId,
+        asset.apartmentId,
+        asset.name,
+        asset.assetType,
+        asset.location,
+        asset.serialNumber,
+        asset.qrCode,
+        asset.criticality,
+        asset.instructionsHtml
+      ]
+    );
+  } catch (error) {
+    handleDuplicateAsset(error);
+  }
 
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
@@ -3283,6 +3346,8 @@ async function getAssetById(id) {
         a.asset_type AS assetType,
         a.location,
         a.serial_number AS serialNumber,
+        a.qr_code AS qrCode,
+        a.instructions_html AS instructionsHtml,
         a.criticality
       FROM assets a
       LEFT JOIN buildings asset_building ON asset_building.id = a.building_id
@@ -3307,23 +3372,29 @@ async function updateAsset(id, input) {
   const asset = normalizeAssetInput(input);
   await assertAssetAssignment(asset);
 
-  await pool.execute(
-    `
-      UPDATE assets
-      SET building_id = ?, apartment_id = ?, name = ?, asset_type = ?, location = ?, serial_number = ?, criticality = ?
-      WHERE id = ?
-    `,
-    [
-      asset.buildingId,
-      asset.apartmentId,
-      asset.name,
-      asset.assetType,
-      asset.location,
-      asset.serialNumber,
-      asset.criticality,
-      id
-    ]
-  );
+  try {
+    await pool.execute(
+      `
+        UPDATE assets
+        SET building_id = ?, apartment_id = ?, name = ?, asset_type = ?, location = ?, serial_number = ?, qr_code = ?, criticality = ?, instructions_html = ?
+        WHERE id = ?
+      `,
+      [
+        asset.buildingId,
+        asset.apartmentId,
+        asset.name,
+        asset.assetType,
+        asset.location,
+        asset.serialNumber,
+        asset.qrCode,
+        asset.criticality,
+        asset.instructionsHtml,
+        id
+      ]
+    );
+  } catch (error) {
+    handleDuplicateAsset(error);
+  }
 
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
@@ -3348,7 +3419,237 @@ async function deleteAsset(id) {
   return { deleted: true };
 }
 
-async function listWorkOrders() {
+async function listAssetChecks(assetId) {
+  const [rows] = await pool.execute(
+    `
+      SELECT
+        id,
+        asset_id AS assetId,
+        label,
+        sort_order AS sortOrder,
+        created_at AS createdAt
+      FROM asset_checks
+      WHERE asset_id = ?
+      ORDER BY sort_order ASC, id ASC
+    `,
+    [assetId]
+  );
+  return rows;
+}
+
+async function createAssetCheck(assetId, input) {
+  const asset = await getAssetById(assetId);
+  if (!asset) {
+    throw createError("Wartungsobjekt nicht gefunden.", 404);
+  }
+
+  const label = normalizeText(input.label);
+  if (!label) {
+    throw createError("Check ist ein Pflichtfeld.", 400);
+  }
+
+  const [[{ nextSortOrder }]] = await pool.execute(
+    "SELECT COALESCE(MAX(sort_order), -1) + 1 AS nextSortOrder FROM asset_checks WHERE asset_id = ?",
+    [assetId]
+  );
+
+  const [result] = await pool.execute(
+    "INSERT INTO asset_checks (asset_id, label, sort_order) VALUES (?, ?, ?)",
+    [assetId, label, nextSortOrder]
+  );
+
+  await pool.execute(
+    `
+      INSERT IGNORE INTO work_order_checks (work_order_id, asset_check_id, label)
+      SELECT wo.id, ?, ?
+      FROM work_orders wo
+      WHERE wo.asset_id = ?
+        AND wo.status <> 'done'
+    `,
+    [result.insertId, label, assetId]
+  );
+
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
+    [assetId, `Check "${label}" am Wartungsobjekt "${asset.name}" angelegt.`]
+  );
+
+  return getAssetDetails(assetId);
+}
+
+async function deleteAssetCheck(id) {
+  const [[check]] = await pool.execute(
+    `
+      SELECT
+        ac.id,
+        ac.asset_id AS assetId,
+        ac.label,
+        a.name AS assetName
+      FROM asset_checks ac
+      INNER JOIN assets a ON a.id = ac.asset_id
+      WHERE ac.id = ?
+    `,
+    [id]
+  );
+  if (!check) {
+    throw createError("Check nicht gefunden.", 404);
+  }
+
+  await pool.execute("DELETE FROM asset_checks WHERE id = ?", [id]);
+  await pool.execute("DELETE FROM work_order_checks WHERE asset_check_id = ? AND checked = FALSE", [id]);
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
+    [check.assetId, `Check "${check.label}" am Wartungsobjekt "${check.assetName}" gelöscht.`]
+  );
+
+  return getAssetDetails(check.assetId);
+}
+
+async function syncWorkOrderChecksFromAsset(workOrderId, assetId) {
+  if (!assetId) {
+    return;
+  }
+
+  await pool.execute(
+    `
+      INSERT IGNORE INTO work_order_checks (work_order_id, asset_check_id, label)
+      SELECT ?, ac.id, ac.label
+      FROM asset_checks ac
+      WHERE ac.asset_id = ?
+      ORDER BY ac.sort_order ASC, ac.id ASC
+    `,
+    [workOrderId, assetId]
+  );
+}
+
+async function listWorkOrderChecks(workOrderId) {
+  const [checks] = await pool.execute(
+    `
+      SELECT
+        id,
+        work_order_id AS workOrderId,
+        asset_check_id AS assetCheckId,
+        label,
+        checked,
+        completed_at AS completedAt
+      FROM work_order_checks
+      WHERE work_order_id = ?
+      ORDER BY id ASC
+    `,
+    [workOrderId]
+  );
+  return checks;
+}
+
+function validateWorkOrderPriority(priority) {
+  const allowedPriorities = new Set(["low", "medium", "high", "critical"]);
+  if (!allowedPriorities.has(priority)) {
+    throw createError("Ungültige Priorität.", 400);
+  }
+}
+
+function validateWorkOrderStatus(status) {
+  const allowedStatuses = new Set(["open", "planned", "in_progress", "done"]);
+  if (!allowedStatuses.has(status)) {
+    throw createError("Ungültiger Status.", 400);
+  }
+}
+
+async function getOpenWorkOrdersForAsset(assetId) {
+  const [rows] = await pool.execute(
+    `
+      SELECT
+        wo.id,
+        wo.title,
+        wo.description,
+        wo.priority,
+        wo.status,
+        DATE_FORMAT(wo.due_date, '%Y-%m-%d') AS dueDate,
+        wo.completed_at AS completedAt,
+        (SELECT COUNT(*) FROM work_order_checks woc WHERE woc.work_order_id = wo.id) AS checkCount,
+        (SELECT COUNT(*) FROM work_order_checks woc WHERE woc.work_order_id = wo.id AND woc.checked = TRUE) AS checkedCount
+      FROM work_orders wo
+      WHERE wo.asset_id = ?
+        AND wo.status <> 'done'
+      ORDER BY wo.due_date ASC, FIELD(wo.priority, 'critical', 'high', 'medium', 'low') ASC
+    `,
+    [assetId]
+  );
+  return rows;
+}
+
+async function getMaintenancePlansForAsset(assetId) {
+  const [rows] = await pool.execute(
+    `
+      SELECT
+        mp.id,
+        mp.asset_id AS assetId,
+        mp.target_type AS targetType,
+        mp.target_id AS targetId,
+        mp.employee_id AS employeeId,
+        mp.title,
+        mp.instructions_html AS instructionsHtml,
+        mp.interval_days AS intervalDays,
+        DATE_FORMAT(mp.next_due_on, '%Y-%m-%d') AS nextDueOn,
+        mp.active,
+        CONCAT(employee.first_name, ' ', employee.last_name) AS employeeName
+      FROM maintenance_plans mp
+      LEFT JOIN employees employee ON employee.id = mp.employee_id
+      WHERE (mp.target_type = 'asset' AND mp.target_id = ?)
+        OR mp.asset_id = ?
+      ORDER BY mp.active DESC, mp.next_due_on ASC
+    `,
+    [assetId, assetId]
+  );
+  return rows;
+}
+
+async function getAssetDetails(id) {
+  const asset = await getAssetById(id);
+  if (!asset) {
+    throw createError("Wartungsobjekt nicht gefunden.", 404);
+  }
+
+  const openOrders = await getOpenWorkOrdersForAsset(id);
+  await Promise.all(openOrders.map((order) => syncWorkOrderChecksFromAsset(order.id, id)));
+
+  return {
+    asset,
+    checks: await listAssetChecks(id),
+    maintenancePlans: await getMaintenancePlansForAsset(id),
+    workOrders: await getOpenWorkOrdersForAsset(id)
+  };
+}
+
+async function getAssetDetailsByQrCode(qrCode) {
+  const normalizedQrCode = normalizeText(qrCode);
+  if (!normalizedQrCode) {
+    throw createError("QR-Code ist ein Pflichtfeld.", 400);
+  }
+
+  const [[asset]] = await pool.execute("SELECT id FROM assets WHERE qr_code = ?", [normalizedQrCode]);
+  if (!asset) {
+    throw createError("Kein Wartungsobjekt zu diesem QR-Code gefunden.", 404);
+  }
+
+  return getAssetDetails(asset.id);
+}
+
+async function listWorkOrders(filter = "open") {
+  const conditions = [];
+  const allowedFilters = new Set(["open", "overdue", "done", "all"]);
+  const activeFilter = allowedFilters.has(filter) ? filter : "open";
+
+  if (activeFilter === "open") {
+    conditions.push("wo.status <> 'done'");
+  } else if (activeFilter === "overdue") {
+    conditions.push("wo.status <> 'done'");
+    conditions.push("wo.due_date < CURDATE()");
+  } else if (activeFilter === "done") {
+    conditions.push("wo.status = 'done'");
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
   const [rows] = await pool.query(`
     SELECT
       wo.id,
@@ -3356,35 +3657,52 @@ async function listWorkOrders() {
       wo.description,
       wo.priority,
       wo.status,
-      wo.due_date AS dueDate,
+      DATE_FORMAT(wo.due_date, '%Y-%m-%d') AS dueDate,
       wo.completed_at AS completedAt,
       a.name AS assetName,
-      a.id AS assetId
+      a.location AS location,
+      a.id AS assetId,
+      (SELECT COUNT(*) FROM work_order_checks woc WHERE woc.work_order_id = wo.id) AS checkCount,
+      (SELECT COUNT(*) FROM work_order_checks woc WHERE woc.work_order_id = wo.id AND woc.checked = TRUE) AS checkedCount
     FROM work_orders wo
     LEFT JOIN assets a ON a.id = wo.asset_id
-    ORDER BY wo.due_date ASC, wo.created_at DESC
+    ${whereClause}
+    ORDER BY wo.due_date ASC, FIELD(wo.priority, 'critical', 'high', 'medium', 'low') ASC, wo.created_at DESC
   `);
   return rows;
 }
 
 async function createWorkOrder(input) {
+  const title = normalizeText(input.title);
+  const description = normalizeText(input.description);
+  const priority = input.priority || "medium";
+  const dueDate = normalizeText(input.dueDate);
+  const assetId = input.assetId ? Number(input.assetId) : null;
+
+  if (!title || !dueDate) {
+    throw createError("Titel und Fälligkeitsdatum sind Pflichtfelder.", 400);
+  }
+
+  validateWorkOrderPriority(priority);
+
   const [result] = await pool.execute(
     `
       INSERT INTO work_orders (asset_id, title, description, priority, status, due_date)
       VALUES (?, ?, ?, ?, 'open', ?)
     `,
     [
-      input.assetId || null,
-      input.title,
-      input.description || null,
-      input.priority || "medium",
-      input.dueDate
+      assetId,
+      title,
+      description,
+      priority,
+      dueDate
     ]
   );
+  await syncWorkOrderChecksFromAsset(result.insertId, assetId);
 
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('work_order', ?, ?)",
-    [result.insertId, `Auftrag "${input.title}" erstellt.`]
+    [result.insertId, `Auftrag "${title}" erstellt.`]
   );
 
   return getWorkOrderById(result.insertId);
@@ -3399,7 +3717,7 @@ async function getWorkOrderById(id) {
         wo.description,
         wo.priority,
         wo.status,
-        wo.due_date AS dueDate,
+        DATE_FORMAT(wo.due_date, '%Y-%m-%d') AS dueDate,
         a.name AS assetName,
         a.id AS assetId
       FROM work_orders wo
@@ -3408,16 +3726,77 @@ async function getWorkOrderById(id) {
     `,
     [id]
   );
-  return row;
+  if (!row) {
+    throw createError("Auftrag nicht gefunden.", 404);
+  }
+
+  await syncWorkOrderChecksFromAsset(row.id, row.assetId);
+  return {
+    ...row,
+    checks: await listWorkOrderChecks(row.id)
+  };
+}
+
+async function updateWorkOrder(id, input) {
+  const existingWorkOrder = await getWorkOrderById(id);
+  const title = normalizeText(input.title) || existingWorkOrder.title;
+  const description = input.description === undefined ? existingWorkOrder.description : normalizeText(input.description);
+  const priority = input.priority || existingWorkOrder.priority;
+  const status = input.status || existingWorkOrder.status;
+  const dueDate = normalizeText(input.dueDate) || existingWorkOrder.dueDate;
+  const assetId = input.assetId === undefined
+    ? existingWorkOrder.assetId
+    : (input.assetId ? Number(input.assetId) : null);
+
+  validateWorkOrderPriority(priority);
+  validateWorkOrderStatus(status);
+
+  await pool.execute(
+    `
+      UPDATE work_orders
+      SET
+        asset_id = ?,
+        title = ?,
+        description = ?,
+        priority = ?,
+        status = ?,
+        due_date = ?,
+        completed_at = CASE WHEN ? = 'done' THEN COALESCE(completed_at, CURRENT_TIMESTAMP) ELSE NULL END
+      WHERE id = ?
+    `,
+    [assetId, title, description, priority, status, dueDate, status, id]
+  );
+  await syncWorkOrderChecksFromAsset(id, assetId);
+
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('work_order', ?, ?)",
+    [id, `Auftrag "${title}" aktualisiert.`]
+  );
+
+  return getWorkOrderById(id);
+}
+
+async function updateWorkOrderCheck(workOrderId, checkId, checked) {
+  await getWorkOrderById(workOrderId);
+  const isChecked = parseBoolean(checked);
+  const [result] = await pool.execute(
+    `
+      UPDATE work_order_checks
+      SET checked = ?, completed_at = CASE WHEN ? = TRUE THEN CURRENT_TIMESTAMP ELSE NULL END
+      WHERE id = ?
+        AND work_order_id = ?
+    `,
+    [isChecked, isChecked, checkId, workOrderId]
+  );
+  if (result.affectedRows === 0) {
+    throw createError("Check nicht gefunden.", 404);
+  }
+
+  return getWorkOrderById(workOrderId);
 }
 
 async function updateWorkOrderStatus(id, status) {
-  const allowedStatuses = new Set(["open", "planned", "in_progress", "done"]);
-  if (!allowedStatuses.has(status)) {
-    const error = new Error("Ungültiger Status.");
-    error.statusCode = 400;
-    throw error;
-  }
+  validateWorkOrderStatus(status);
 
   await pool.execute(
     `
@@ -3480,10 +3859,17 @@ module.exports = {
   deleteMaintenancePlan,
   getCalendarEvents,
   listAssets,
+  getAssetDetails,
+  getAssetDetailsByQrCode,
   createAsset,
   updateAsset,
   deleteAsset,
+  createAssetCheck,
+  deleteAssetCheck,
   listWorkOrders,
   createWorkOrder,
+  getWorkOrderById,
+  updateWorkOrder,
+  updateWorkOrderCheck,
   updateWorkOrderStatus
 };

@@ -43,7 +43,9 @@ Der Workflow startet bei einem Kunden. Beim Anlegen vergibt DR Maintenance autom
 
 Verknüpfte Felder wie Kunde, Gebäude, Objekt-Zuordnung und Wartungsobjekt sind als durchsuchbare Auswahlfelder umgesetzt. Beim Tippen wird die Ergebnisliste live eingeschränkt; gespeichert wird weiterhin die eindeutige interne ID.
 
-Kunden, Gebäude/Appartments und Wartungsobjekte werden jeweils unter den Formularen gelistet und können gefiltert werden. Wartungspläne werden direkt auf ein Wartungsobjekt gelegt, können bearbeitet werden und können einen HTML-Arbeitstext mit Bildern enthalten. Der Kalender zeigt aus einem Wartungsplan nicht nur die nächste Fälligkeit, sondern auch die folgenden rechnerischen Termine im sichtbaren Zeitraum anhand des hinterlegten Intervalls. Wenn Termine auf gesperrte Wochentage, bereits belegte Tage oder direkt benachbarte Wartungstage fallen, werden sie auf den nächsten erlaubten freien Tag verschoben.
+Kunden, Gebäude/Appartments und Wartungsobjekte werden jeweils unter den Formularen gelistet und können gefiltert werden. Wartungsobjekte können mit einem QR-Code verknüpft werden, haben einen eigenen HTML-Arbeitstext mit Bildern und verwalten eigene Check-Vorlagen wie `Filter wechseln` oder `Klimaanlage auf Funktion testen`. Diese Checks werden in offene Aufträge übernommen und dort abgehakt. Bei jedem Wartungsobjekt werden außerdem die zugehörigen Wartungspläne und offenen/fälligen Aufträge angezeigt. Wartungspläne werden direkt auf ein Wartungsobjekt gelegt, können bearbeitet werden und können ebenfalls einen HTML-Arbeitstext mit Bildern enthalten. Der Kalender zeigt aus einem Wartungsplan nicht nur die nächste Fälligkeit, sondern auch die folgenden rechnerischen Termine im sichtbaren Zeitraum anhand des hinterlegten Intervalls. Wenn Termine auf gesperrte Wochentage, bereits belegte Tage oder direkt benachbarte Wartungstage fallen, werden sie auf den nächsten erlaubten freien Tag verschoben.
+
+Aufträge haben eine eigene Seite. Standardmäßig werden offene Aufträge angezeigt; über den Filter können überfällige, erledigte oder alle Aufträge geladen werden. Ein Klick auf einen Auftrag öffnet die Bearbeitung, damit Status, Fälligkeit, Beschreibung und die enthaltenen Checks abgearbeitet werden können. Die alte Schnell-Erfassung im Dashboard wurde entfernt.
 
 Mitarbeiternummern werden automatisch fortlaufend im Format `M0001`, `M0002` usw. vergeben und können bei Bedarf geändert werden. Mitarbeiterfunktionen werden in den Stammdaten gepflegt und anschließend Mitarbeitern zugewiesen. Benutzerrollen werden im Benutzerbereich gepflegt; die Systemrollen `admin` und `customer`/`Kunde` werden initial angelegt und können nicht gelöscht werden.
 
@@ -87,9 +89,13 @@ Mitarbeiternummern werden automatisch fortlaufend im Format `M0001`, `M0002` usw
 - `PATCH /api/maintenance-plans/:id`
 - `DELETE /api/maintenance-plans/:id`
 - `GET /api/assets`
+- `GET /api/assets/by-qr/:qrCode`
+- `GET /api/assets/:id/details`
 - `POST /api/assets`
 - `PATCH /api/assets/:id`
 - `DELETE /api/assets/:id`
+- `POST /api/assets/:id/checks`
+- `DELETE /api/asset-checks/:id`
 - `GET /api/users`
 - `POST /api/users`
 - `PATCH /api/users/:id`
@@ -99,7 +105,10 @@ Mitarbeiternummern werden automatisch fortlaufend im Format `M0001`, `M0002` usw
 - `PATCH /api/user-roles/:roleKey`
 - `DELETE /api/user-roles/:roleKey`
 - `GET /api/work-orders`
+- `GET /api/work-orders/:id`
 - `POST /api/work-orders`
+- `PATCH /api/work-orders/:id`
+- `PATCH /api/work-orders/:id/checks/:checkId`
 - `PATCH /api/work-orders/:id/status`
 
 ## Versionierung

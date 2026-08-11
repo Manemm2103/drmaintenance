@@ -369,6 +369,14 @@ app.get("/api/assets", asyncRoute(async (_req, res) => {
   res.json(await db.listAssets());
 }));
 
+app.get("/api/assets/by-qr/:qrCode", asyncRoute(async (req, res) => {
+  res.json(await db.getAssetDetailsByQrCode(req.params.qrCode));
+}));
+
+app.get("/api/assets/:id/details", asyncRoute(async (req, res) => {
+  res.json(await db.getAssetDetails(Number(req.params.id)));
+}));
+
 app.post("/api/assets", asyncRoute(async (req, res) => {
   requireFields(req.body, ["name", "assetType", "location"]);
   const asset = await db.createAsset(req.body);
@@ -384,14 +392,35 @@ app.delete("/api/assets/:id", asyncRoute(async (req, res) => {
   res.json(await db.deleteAsset(Number(req.params.id)));
 }));
 
-app.get("/api/work-orders", asyncRoute(async (_req, res) => {
-  res.json(await db.listWorkOrders());
+app.post("/api/assets/:id/checks", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["label"]);
+  res.status(201).json(await db.createAssetCheck(Number(req.params.id), req.body));
+}));
+
+app.delete("/api/asset-checks/:id", asyncRoute(async (req, res) => {
+  res.json(await db.deleteAssetCheck(Number(req.params.id)));
+}));
+
+app.get("/api/work-orders", asyncRoute(async (req, res) => {
+  res.json(await db.listWorkOrders(req.query.filter));
+}));
+
+app.get("/api/work-orders/:id", asyncRoute(async (req, res) => {
+  res.json(await db.getWorkOrderById(Number(req.params.id)));
 }));
 
 app.post("/api/work-orders", asyncRoute(async (req, res) => {
   requireFields(req.body, ["title", "dueDate"]);
   const workOrder = await db.createWorkOrder(req.body);
   res.status(201).json(workOrder);
+}));
+
+app.patch("/api/work-orders/:id", asyncRoute(async (req, res) => {
+  res.json(await db.updateWorkOrder(Number(req.params.id), req.body));
+}));
+
+app.patch("/api/work-orders/:id/checks/:checkId", asyncRoute(async (req, res) => {
+  res.json(await db.updateWorkOrderCheck(Number(req.params.id), Number(req.params.checkId), req.body.checked));
 }));
 
 app.patch("/api/work-orders/:id/status", asyncRoute(async (req, res) => {

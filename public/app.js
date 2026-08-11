@@ -14,7 +14,15 @@ const els = {
   orderCount: document.querySelector("#orderCount"),
   overdueCount: document.querySelector("#overdueCount"),
   customerCount: document.querySelector("#customerCount"),
-  workOrderRows: document.querySelector("#workOrderRows"),
+  workOrderList: document.querySelector("#workOrderList"),
+  workOrderStatusFilter: document.querySelector("#workOrderStatusFilter"),
+  workOrderResultCount: document.querySelector("#workOrderResultCount"),
+  workOrderRefreshButton: document.querySelector("#workOrderRefreshButton"),
+  workOrderDetailEmpty: document.querySelector("#workOrderDetailEmpty"),
+  workOrderDetailForm: document.querySelector("#workOrderDetailForm"),
+  workOrderIdInput: document.querySelector("#workOrderIdInput"),
+  workOrderCheckList: document.querySelector("#workOrderCheckList"),
+  workOrderDoneButton: document.querySelector("#workOrderDoneButton"),
   assetList: document.querySelector("#assetList"),
   assetSearchInput: document.querySelector("#assetSearchInput"),
   assetCustomerFilter: document.querySelector("#assetCustomerFilter"),
@@ -41,7 +49,6 @@ const els = {
   propertyTypeFilter: document.querySelector("#propertyTypeFilter"),
   propertyFilterResetButton: document.querySelector("#propertyFilterResetButton"),
   propertyResultCount: document.querySelector("#propertyResultCount"),
-  assetSelect: document.querySelector("#assetSelect"),
   assetPropertyTargetSelect: document.querySelector("#assetPropertyTargetSelect"),
   apartmentBuildingSelect: document.querySelector("#apartmentBuildingSelect"),
   buildingCustomerSelect: document.querySelector("#buildingCustomerSelect"),
@@ -55,8 +62,6 @@ const els = {
   calendarMonthLabel: document.querySelector("#calendarMonthLabel"),
   prevMonthButton: document.querySelector("#prevMonthButton"),
   nextMonthButton: document.querySelector("#nextMonthButton"),
-  refreshButton: document.querySelector("#refreshButton"),
-  workOrderForm: document.querySelector("#workOrderForm"),
   maintenanceForm: document.querySelector("#maintenanceForm"),
   maintenancePlanIdInput: document.querySelector("#maintenancePlanIdInput"),
   maintenanceSubmitButton: document.querySelector("#maintenanceSubmitButton"),
@@ -65,6 +70,12 @@ const els = {
   assetIdInput: document.querySelector("#assetIdInput"),
   assetSubmitButton: document.querySelector("#assetSubmitButton"),
   assetNewButton: document.querySelector("#assetNewButton"),
+  assetDetailPanel: document.querySelector("#assetDetailPanel"),
+  assetCheckForm: document.querySelector("#assetCheckForm"),
+  assetCheckAssetIdInput: document.querySelector("#assetCheckAssetIdInput"),
+  assetCheckList: document.querySelector("#assetCheckList"),
+  assetMaintenancePlanList: document.querySelector("#assetMaintenancePlanList"),
+  assetOpenOrderList: document.querySelector("#assetOpenOrderList"),
   buildingForm: document.querySelector("#buildingForm"),
   buildingIdInput: document.querySelector("#buildingIdInput"),
   buildingSubmitButton: document.querySelector("#buildingSubmitButton"),
@@ -183,6 +194,14 @@ const viewConfig = {
     actionView: "kunden",
     scrollTarget: "customerForm"
   },
+  auftraege: {
+    eyebrow: "Aufträge",
+    title: "Offene und fällige Aufträge bearbeiten.",
+    actionLabel: "Offene",
+    actionTitle: "Offene Aufträge anzeigen",
+    actionView: "auftraege",
+    scrollTarget: "auftraege"
+  },
   wartungsobjekte: {
     eyebrow: "Inventar",
     title: "Wartungsobjekte verwalten.",
@@ -228,8 +247,7 @@ const viewConfig = {
 const hashViewMap = {
   dashboard: "dashboard",
   kalender: "dashboard",
-  auftraege: "dashboard",
-  "new-work-order": "dashboard",
+  auftraege: "auftraege",
   stammdaten: "stammdaten",
   kunden: "kunden",
   wartungsobjekte: "wartungsobjekte",
@@ -248,6 +266,8 @@ let latestEmployees = [];
 let latestEmployeeFunctions = [];
 let latestPlans = [];
 let latestUserRoles = [];
+let latestWorkOrders = [];
+let activeWorkOrder = null;
 const searchableSelects = new Map();
 
 async function api(path, options = {}) {
@@ -390,7 +410,6 @@ function createSearchableSelect(select) {
 
 function initializeSearchableSelects() {
   [
-    els.assetSelect,
     els.assetPropertyTargetSelect,
     els.apartmentBuildingSelect,
     els.buildingCustomerSelect,
@@ -636,7 +655,7 @@ async function loadCurrentUser() {
 }
 
 function renderSummary(payload) {
-  const { summary, workOrders, assets, plans, activity, customers, employees, employeeFunctions, settings, users, userRoles } = payload;
+  const { summary, assets, plans, activity, customers, employees, employeeFunctions, settings, users, userRoles } = payload;
   latestAssets = assets || [];
   latestCustomers = customers || [];
   latestEmployees = employees || [];
@@ -650,7 +669,6 @@ function renderSummary(payload) {
   els.overdueCount.textContent = summary.overdueCount;
   els.customerCount.textContent = summary.customerCount;
 
-  renderWorkOrders(workOrders);
   renderAssetCustomerFilterOptions(customers);
   renderAssets(assets);
   renderPlans(plans);
@@ -661,7 +679,6 @@ function renderSummary(payload) {
   renderUsers(users);
   renderUserRoles(userRoles);
   renderCustomerOptions(customers);
-  renderAssetOptions(assets);
   renderEmployeeOptions(employees);
   renderEmployeeFunctionOptions(employeeFunctions);
   renderUserRoleOptions(userRoles);
@@ -674,29 +691,75 @@ function renderAppSettings(settings) {
 }
 
 function renderWorkOrders(workOrders) {
-  if (workOrders.length === 0) {
-    els.workOrderRows.innerHTML = '<tr><td colspan="6">Keine offenen Aufträge.</td></tr>';
+  latestWorkOrders = workOrders || [];
+  if (!els.workOrderList) {
     return;
   }
 
-  els.workOrderRows.innerHTML = workOrders.map((order) => `
-    <tr>
-      <td>
+  els.workOrderResultCount.textContent = `${latestWorkOrders.length} Aufträge`;
+
+  if (latestWorkOrders.length === 0) {
+    els.workOrderList.innerHTML = '<div class="list-item">Keine Aufträge für diesen Filter.</div>';
+    return;
+  }
+
+  els.workOrderList.innerHTML = latestWorkOrders.map((order) => {
+    const checkCount = Number(order.checkCount || 0);
+    const checkedCount = Number(order.checkedCount || 0);
+    const isOverdue = order.status !== "done" && order.dueDate && order.dueDate < toDateKey(new Date());
+
+    return `
+    <div class="work-order-card clickable-list-item ${isOverdue ? "is-overdue" : ""}" role="button" tabindex="0" data-edit-work-order="${order.id}" title="Auftrag öffnen">
+      <div>
         <strong>${escapeHtml(order.title)}</strong>
-        <div class="muted">${escapeHtml(order.description || "Keine Beschreibung")}</div>
-      </td>
-      <td>
-        ${escapeHtml(order.assetName || "Ohne Objekt")}
-        <div class="muted">${escapeHtml(order.location || "")}</div>
-      </td>
-      <td>${formatDate(order.dueDate)}</td>
-      <td><span class="badge">${statusLabels[order.status] || order.status}</span></td>
-      <td><span class="badge ${order.priority === "critical" ? "light" : ""}">${priorityLabels[order.priority] || order.priority}</span></td>
-      <td>
-        <button class="compact-button" type="button" title="Als erledigt markieren" aria-label="Als erledigt markieren" data-complete="${order.id}">OK</button>
-      </td>
-    </tr>
+        <div class="list-meta">
+          <span>${escapeHtml(order.assetName || "Ohne Objekt")}</span>
+          <span>${formatDate(order.dueDate)}</span>
+          <span>${statusLabels[order.status] || order.status}</span>
+          <span>${priorityLabels[order.priority] || order.priority}</span>
+          <span>${checkCount > 0 ? `${checkedCount}/${checkCount} Checks` : "Keine Checks"}</span>
+        </div>
+        ${order.description ? `<div class="muted">${escapeHtml(order.description)}</div>` : ""}
+      </div>
+      <div class="inline-actions">
+        ${order.status === "done" ? '<span class="system-note">erledigt</span>' : `<button class="compact-button" type="button" title="Als erledigt markieren" aria-label="Als erledigt markieren" data-complete="${order.id}">OK</button>`}
+      </div>
+    </div>
+  `;
+  }).join("");
+}
+
+function renderWorkOrderChecks(checks = []) {
+  if (!els.workOrderCheckList) {
+    return;
+  }
+
+  if (checks.length === 0) {
+    els.workOrderCheckList.innerHTML = '<div class="list-item">Für dieses Objekt sind keine Checks hinterlegt.</div>';
+    return;
+  }
+
+  els.workOrderCheckList.innerHTML = checks.map((check) => `
+    <label class="check-item">
+      <input type="checkbox" data-work-order-check="${check.id}" ${Number(check.checked) === 1 || check.checked === true ? "checked" : ""}>
+      <span>${escapeHtml(check.label)}</span>
+    </label>
   `).join("");
+}
+
+function renderWorkOrderDetail(order) {
+  activeWorkOrder = order;
+  els.workOrderDetailEmpty.hidden = true;
+  els.workOrderDetailForm.hidden = false;
+  els.workOrderDetailForm.elements.workOrderId.value = order.id;
+  els.workOrderDetailForm.elements.title.value = order.title || "";
+  els.workOrderDetailForm.elements.assetName.value = order.assetName || "Ohne Objekt";
+  els.workOrderDetailForm.elements.status.value = order.status || "open";
+  els.workOrderDetailForm.elements.priority.value = order.priority || "medium";
+  els.workOrderDetailForm.elements.dueDate.value = order.dueDate || "";
+  els.workOrderDetailForm.elements.description.value = order.description || "";
+  els.workOrderDoneButton.hidden = order.status === "done";
+  renderWorkOrderChecks(order.checks || []);
 }
 
 function getAssetAddressLabel(asset) {
@@ -709,6 +772,8 @@ function getAssetSearchText(asset) {
     asset.assetType,
     asset.location,
     asset.serialNumber,
+    asset.qrCode,
+    asset.instructionsHtml,
     asset.criticality,
     asset.assignmentLabel,
     asset.buildingAddress,
@@ -783,7 +848,9 @@ function renderAssets(assets = latestAssets) {
           <span>${escapeHtml(asset.location)}</span>
           <span>${priorityLabels[asset.criticality] || asset.criticality}</span>
           ${asset.serialNumber ? `<span>${escapeHtml(asset.serialNumber)}</span>` : ""}
+          ${asset.qrCode ? `<span>QR: ${escapeHtml(asset.qrCode)}</span>` : ""}
         </div>
+        ${asset.instructionsHtml ? `<div class="maintenance-html-preview">${sanitizeMaintenanceHtml(asset.instructionsHtml)}</div>` : ""}
       </div>
       <div class="inline-actions">
         <button class="compact-button" type="button" title="Wartungsobjekt duplizieren" aria-label="Wartungsobjekt duplizieren" data-duplicate-asset="${asset.id}">Kopie</button>
@@ -791,6 +858,70 @@ function renderAssets(assets = latestAssets) {
       </div>
     </div>
   `).join("");
+}
+
+function renderAssetChecks(checks = []) {
+  if (!checks.length) {
+    els.assetCheckList.innerHTML = '<div class="list-item">Noch keine Checks für dieses Objekt.</div>';
+    return;
+  }
+
+  els.assetCheckList.innerHTML = checks.map((check) => `
+    <div class="list-item list-item-with-actions">
+      <strong>${escapeHtml(check.label)}</strong>
+      <button class="compact-button" type="button" title="Check löschen" aria-label="Check löschen" data-delete-asset-check="${check.id}">X</button>
+    </div>
+  `).join("");
+}
+
+function renderAssetMaintenancePlans(plans = []) {
+  if (!plans.length) {
+    els.assetMaintenancePlanList.innerHTML = '<div class="list-item">Keine Wartungspläne für dieses Objekt.</div>';
+    return;
+  }
+
+  els.assetMaintenancePlanList.innerHTML = plans.map((plan) => `
+    <div class="list-item clickable-list-item" role="button" tabindex="0" data-edit-plan="${plan.id}" title="Wartungsplan bearbeiten">
+      <strong>${escapeHtml(plan.title || "Wartungsplan")}</strong>
+      <div class="list-meta">
+        <span>${formatDate(plan.nextDueOn)}</span>
+        <span>${plan.intervalDays} Tage</span>
+        <span>${escapeHtml(plan.employeeName || "Kein Mitarbeiter")}</span>
+        <span>${Number(plan.active) === 1 || plan.active === true ? "Aktiv" : "Inaktiv"}</span>
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderAssetOpenOrders(workOrders = []) {
+  if (!workOrders.length) {
+    els.assetOpenOrderList.innerHTML = '<div class="list-item">Keine offenen Aufträge für dieses Objekt.</div>';
+    return;
+  }
+
+  els.assetOpenOrderList.innerHTML = workOrders.map((order) => {
+    const checkCount = Number(order.checkCount || 0);
+    const checkedCount = Number(order.checkedCount || 0);
+    return `
+      <div class="list-item clickable-list-item" role="button" tabindex="0" data-open-work-order="${order.id}" title="Auftrag öffnen">
+        <strong>${escapeHtml(order.title)}</strong>
+        <div class="list-meta">
+          <span>${formatDate(order.dueDate)}</span>
+          <span>${statusLabels[order.status] || order.status}</span>
+          <span>${priorityLabels[order.priority] || order.priority}</span>
+          <span>${checkCount > 0 ? `${checkedCount}/${checkCount} Checks` : "Keine Checks"}</span>
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderAssetDetails(details) {
+  els.assetDetailPanel.hidden = false;
+  els.assetCheckAssetIdInput.value = details.asset.id;
+  renderAssetChecks(details.checks || []);
+  renderAssetMaintenancePlans(details.maintenancePlans || []);
+  renderAssetOpenOrders(details.workOrders || []);
 }
 
 function renderPlans(plans) {
@@ -1173,15 +1304,6 @@ function groupEventsByDate(events) {
   }, new Map());
 }
 
-function renderAssetOptions(assets) {
-  const currentValue = els.assetSelect.value;
-  els.assetSelect.innerHTML = '<option value="">Ohne Objekt</option>' + assets.map((asset) => (
-    `<option value="${asset.id}">${escapeHtml(asset.name)}</option>`
-  )).join("");
-  els.assetSelect.value = currentValue;
-  refreshSearchableSelect(els.assetSelect);
-}
-
 function renderCustomerOptions(customers) {
   const buildingValue = els.buildingCustomerSelect.value;
   const apartmentValue = els.apartmentCustomerSelect.value;
@@ -1309,6 +1431,8 @@ function getAssetFormPayload() {
     assetType: data.assetType,
     location: data.location,
     serialNumber: data.serialNumber,
+    qrCode: data.qrCode,
+    instructionsHtml: data.instructionsHtml,
     criticality: data.criticality,
     propertyTarget: data.propertyTarget
   };
@@ -1319,6 +1443,11 @@ function resetAssetForm() {
   els.assetIdInput.value = "";
   syncSearchableSelect(els.assetPropertyTargetSelect);
   els.assetSubmitButton.textContent = "Objekt speichern";
+  els.assetDetailPanel.hidden = true;
+  els.assetCheckAssetIdInput.value = "";
+  els.assetCheckList.innerHTML = "";
+  els.assetMaintenancePlanList.innerHTML = "";
+  els.assetOpenOrderList.innerHTML = "";
 }
 
 function loadAssetIntoForm(asset) {
@@ -1327,13 +1456,18 @@ function loadAssetIntoForm(asset) {
   els.assetForm.elements.assetType.value = asset.assetType || "";
   els.assetForm.elements.location.value = asset.location || "";
   els.assetForm.elements.serialNumber.value = asset.serialNumber || "";
+  els.assetForm.elements.qrCode.value = asset.qrCode || "";
   els.assetForm.elements.criticality.value = asset.criticality || "medium";
+  els.assetForm.elements.instructionsHtml.value = asset.instructionsHtml || "";
   els.assetForm.elements.propertyTarget.value = asset.assignmentType && asset.assignmentId
     ? `${asset.assignmentType}:${asset.assignmentId}`
     : "";
   syncSearchableSelect(els.assetPropertyTargetSelect);
   els.assetSubmitButton.textContent = "Änderungen speichern";
   setView("wartungsobjekte", { updateHash: true, scrollTop: false });
+  if (asset.id) {
+    loadAssetDetails(asset.id).catch((error) => showToast(error.message));
+  }
   window.setTimeout(() => scrollToTarget("assetForm"), 0);
 }
 
@@ -1341,9 +1475,11 @@ function duplicateAssetInForm(asset) {
   loadAssetIntoForm({
     ...asset,
     id: "",
-    name: `${asset.name} Kopie`
+    name: `${asset.name} Kopie`,
+    qrCode: ""
   });
   els.assetIdInput.value = "";
+  els.assetDetailPanel.hidden = true;
   els.assetSubmitButton.textContent = "Kopie speichern";
 }
 
@@ -1648,22 +1784,43 @@ function sanitizeMaintenanceHtml(html) {
 async function loadDashboard() {
   try {
     const range = getCalendarRange();
-    const [summary, properties, targets, calendarEvents] = await Promise.all([
+    const workOrderFilter = els.workOrderStatusFilter?.value || "open";
+    const [summary, properties, targets, calendarEvents, workOrders] = await Promise.all([
       api("/api/summary"),
       api("/api/properties"),
       api("/api/maintenance-targets"),
-      api(`/api/calendar?start=${range.start}&end=${range.end}`)
+      api(`/api/calendar?start=${range.start}&end=${range.end}`),
+      api(`/api/work-orders?filter=${encodeURIComponent(workOrderFilter)}`)
     ]);
 
     renderSummary(summary);
     renderProperties(properties);
     renderMaintenanceTargetOptions(targets);
     renderCalendar(calendarEvents);
+    renderWorkOrders(workOrders);
     setConnectionStatus(true);
   } catch (error) {
     setConnectionStatus(false);
     showToast(error.message);
   }
+}
+
+async function loadWorkOrders() {
+  const filter = els.workOrderStatusFilter?.value || "open";
+  const workOrders = await api(`/api/work-orders?filter=${encodeURIComponent(filter)}`);
+  renderWorkOrders(workOrders);
+}
+
+async function loadWorkOrderIntoDetail(id) {
+  const order = await api(`/api/work-orders/${id}`);
+  renderWorkOrderDetail(order);
+  setView("auftraege", { updateHash: true, scrollTop: false });
+  window.setTimeout(() => scrollToTarget("work-order-detail"), 0);
+}
+
+async function loadAssetDetails(id) {
+  const details = await api(`/api/assets/${id}/details`);
+  renderAssetDetails(details);
 }
 
 async function completeWorkOrder(id) {
@@ -1672,7 +1829,25 @@ async function completeWorkOrder(id) {
     body: JSON.stringify({ status: "done" })
   });
   showToast("Auftrag erledigt.");
+  if (activeWorkOrder && String(activeWorkOrder.id) === String(id)) {
+    activeWorkOrder = null;
+    els.workOrderDetailForm.hidden = true;
+    els.workOrderDetailEmpty.hidden = false;
+  }
   await loadDashboard();
+}
+
+async function updateWorkOrderCheck(checkId, checked) {
+  if (!activeWorkOrder) {
+    return;
+  }
+
+  const order = await api(`/api/work-orders/${activeWorkOrder.id}/checks/${checkId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ checked })
+  });
+  renderWorkOrderDetail(order);
+  await loadWorkOrders();
 }
 
 async function deleteUser(id) {
@@ -1740,6 +1915,19 @@ async function deleteAsset(id) {
     method: "DELETE"
   });
   showToast("Wartungsobjekt gelöscht.");
+  await loadDashboard();
+}
+
+async function deleteAssetCheck(id) {
+  if (!window.confirm("Check wirklich löschen? Nicht erledigte Kopien in offenen Aufträgen werden entfernt.")) {
+    return;
+  }
+
+  const details = await api(`/api/asset-checks/${id}`, {
+    method: "DELETE"
+  });
+  renderAssetDetails(details);
+  showToast("Check gelöscht.");
   await loadDashboard();
 }
 
@@ -1825,7 +2013,12 @@ function bindEvents() {
   window.addEventListener("hashchange", showViewFromHash);
   window.addEventListener("popstate", showViewFromHash);
 
-  els.refreshButton.addEventListener("click", loadDashboard);
+  els.workOrderRefreshButton.addEventListener("click", () => {
+    loadWorkOrders().catch((error) => showToast(error.message));
+  });
+  els.workOrderStatusFilter.addEventListener("change", () => {
+    loadWorkOrders().catch((error) => showToast(error.message));
+  });
   els.logoutButton.addEventListener("click", () => {
     logout().catch((error) => showToast(error.message));
   });
@@ -1890,7 +2083,28 @@ function bindEvents() {
 
     const completeButton = event.target.closest("[data-complete]");
     if (completeButton) {
+      event.stopPropagation();
       completeWorkOrder(completeButton.dataset.complete).catch((error) => showToast(error.message));
+      return;
+    }
+
+    const editWorkOrder = event.target.closest("[data-edit-work-order]");
+    if (editWorkOrder) {
+      loadWorkOrderIntoDetail(editWorkOrder.dataset.editWorkOrder).catch((error) => showToast(error.message));
+      return;
+    }
+
+    const openWorkOrder = event.target.closest("[data-open-work-order]");
+    if (openWorkOrder) {
+      loadWorkOrderIntoDetail(openWorkOrder.dataset.openWorkOrder).catch((error) => showToast(error.message));
+      return;
+    }
+
+    const deleteAssetCheckButton = event.target.closest("[data-delete-asset-check]");
+    if (deleteAssetCheckButton) {
+      event.stopPropagation();
+      deleteAssetCheck(deleteAssetCheckButton.dataset.deleteAssetCheck).catch((error) => showToast(error.message));
+      return;
     }
 
     const deleteUserButton = event.target.closest("[data-delete-user]");
@@ -2044,6 +2258,20 @@ function bindEvents() {
       return;
     }
 
+    const editWorkOrder = event.target.closest("[data-edit-work-order]");
+    if (editWorkOrder) {
+      event.preventDefault();
+      loadWorkOrderIntoDetail(editWorkOrder.dataset.editWorkOrder).catch((error) => showToast(error.message));
+      return;
+    }
+
+    const openWorkOrder = event.target.closest("[data-open-work-order]");
+    if (openWorkOrder) {
+      event.preventDefault();
+      loadWorkOrderIntoDetail(openWorkOrder.dataset.openWorkOrder).catch((error) => showToast(error.message));
+      return;
+    }
+
     const editAsset = event.target.closest("[data-edit-asset]");
     if (editAsset) {
       event.preventDefault();
@@ -2114,29 +2342,42 @@ function bindEvents() {
     }
   });
 
-  els.workOrderForm.addEventListener("submit", async (event) => {
+  els.workOrderDetailForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!validateSearchableSelect(els.assetSelect, "Bitte ein Objekt aus der Liste auswählen oder das Feld leeren.")) {
+    const data = Object.fromEntries(new FormData(els.workOrderDetailForm));
+    if (!data.workOrderId) {
       return;
     }
 
-    const data = Object.fromEntries(new FormData(els.workOrderForm));
-
-    await api("/api/work-orders", {
-      method: "POST",
+    const order = await api(`/api/work-orders/${data.workOrderId}`, {
+      method: "PATCH",
       body: JSON.stringify({
         title: data.title,
-        assetId: data.assetId ? Number(data.assetId) : null,
+        status: data.status,
         priority: data.priority,
         dueDate: data.dueDate,
         description: data.description
       })
     });
 
-    els.workOrderForm.reset();
-    syncSearchableSelect(els.assetSelect);
-    showToast("Auftrag gespeichert.");
+    renderWorkOrderDetail(order);
+    showToast("Auftrag aktualisiert.");
     await loadDashboard();
+  });
+
+  els.workOrderDoneButton.addEventListener("click", () => {
+    if (activeWorkOrder) {
+      completeWorkOrder(activeWorkOrder.id).catch((error) => showToast(error.message));
+    }
+  });
+
+  els.workOrderCheckList.addEventListener("change", (event) => {
+    const checkbox = event.target.closest("[data-work-order-check]");
+    if (!checkbox) {
+      return;
+    }
+
+    updateWorkOrderCheck(checkbox.dataset.workOrderCheck, checkbox.checked).catch((error) => showToast(error.message));
   });
 
   els.maintenanceForm.addEventListener("submit", async (event) => {
@@ -2188,7 +2429,9 @@ function bindEvents() {
         assetType: data.assetType,
         location: data.location,
         serialNumber: data.serialNumber,
+        qrCode: data.qrCode,
         criticality: data.criticality,
+        instructionsHtml: data.instructionsHtml,
         propertyTarget: data.propertyTarget
       })
     });
@@ -2199,6 +2442,28 @@ function bindEvents() {
   });
 
   els.assetNewButton.addEventListener("click", resetAssetForm);
+
+  els.assetCheckForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(els.assetCheckForm));
+    const assetId = data.assetCheckAssetId;
+    const label = data.label?.trim();
+    if (!assetId || !label) {
+      showToast("Bitte zuerst ein Objekt wählen und einen Check eingeben.");
+      return;
+    }
+
+    const details = await api(`/api/assets/${assetId}/checks`, {
+      method: "POST",
+      body: JSON.stringify({ label })
+    });
+
+    els.assetCheckForm.reset();
+    els.assetCheckAssetIdInput.value = assetId;
+    renderAssetDetails(details);
+    showToast("Check hinzugefügt.");
+    await loadDashboard();
+  });
 
   els.customerForm.addEventListener("submit", async (event) => {
     event.preventDefault();

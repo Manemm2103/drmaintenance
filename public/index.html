@@ -21,6 +21,7 @@
         <nav class="nav">
           <a href="#dashboard" class="active" data-view-link="dashboard" data-nav-key="dashboard">Dashboard</a>
           <a href="#kalender" data-view-link="dashboard" data-nav-key="kalender" data-scroll-target="kalender">Kalender</a>
+          <a href="#auftraege" data-view-link="auftraege">Aufträge</a>
           <a href="#kunden" data-view-link="kunden">Kunden</a>
           <a href="#wartungsobjekte" data-view-link="wartungsobjekte">Objekte</a>
           <a href="#gebaeude" data-view-link="gebaeude">Gebäude</a>
@@ -434,57 +435,66 @@
           </section>
         </section>
 
-        <section class="view" data-view="dashboard">
+        <section class="view" data-view="auftraege">
           <section class="workspace-grid">
           <article class="panel wide" id="auftraege">
             <div class="panel-header">
               <div>
-                <p class="eyebrow">Priorität</p>
-                <h2>Nächste Aufträge</h2>
+                <p class="eyebrow">Aufträge</p>
+                <h2>Auftragsliste</h2>
               </div>
-              <button class="ghost-button" type="button" id="refreshButton">Aktualisieren</button>
+              <button class="ghost-button" type="button" id="workOrderRefreshButton">Aktualisieren</button>
             </div>
-            <div class="table-wrap">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Auftrag</th>
-                    <th>Objekt</th>
-                    <th>Fällig</th>
-                    <th>Status</th>
-                    <th>Prio</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody id="workOrderRows">
-                  <tr>
-                    <td colspan="6">Daten werden geladen...</td>
-                  </tr>
-                </tbody>
-              </table>
+            <div class="asset-filter-bar" aria-label="Aufträge filtern">
+              <label>
+                Status
+                <select id="workOrderStatusFilter">
+                  <option value="open" selected>Offen</option>
+                  <option value="overdue">Überfällig</option>
+                  <option value="all">Alle</option>
+                  <option value="done">Erledigt</option>
+                </select>
+              </label>
+              <div class="filter-actions">
+                <span id="workOrderResultCount" class="muted">0 Aufträge</span>
+              </div>
+            </div>
+            <div class="work-order-list" id="workOrderList">
+              <div class="list-item">Daten werden geladen...</div>
             </div>
           </article>
 
-          <article class="panel" id="new-work-order">
+          <article class="panel" id="work-order-detail">
             <div class="panel-header">
               <div>
-                <p class="eyebrow">Schnellerfassung</p>
-                <h2>Auftrag anlegen</h2>
+                <p class="eyebrow">Bearbeitung</p>
+                <h2>Auftrag öffnen</h2>
               </div>
             </div>
-            <form id="workOrderForm" class="form-grid">
+            <div class="detail-empty" id="workOrderDetailEmpty">
+              Einen Auftrag anklicken, um Checks abzuarbeiten oder Details zu ändern.
+            </div>
+            <form id="workOrderDetailForm" class="form-grid compact-form" hidden>
+              <input name="workOrderId" id="workOrderIdInput" type="hidden">
               <label>
                 Titel
-                <input name="title" placeholder="z.B. Filter wechseln" required>
+                <input name="title" required>
               </label>
               <label>
                 Objekt
-                <select name="assetId" id="assetSelect">
-                  <option value="">Ohne Objekt</option>
+                <input name="assetName" readonly>
+              </label>
+              <label>
+                Status
+                <select name="status">
+                  <option value="open">Offen</option>
+                  <option value="planned">Geplant</option>
+                  <option value="in_progress">In Arbeit</option>
+                  <option value="done">Erledigt</option>
                 </select>
               </label>
               <label>
-                Priorität
+                Prio
                 <select name="priority">
                   <option value="medium">Mittel</option>
                   <option value="high">Hoch</option>
@@ -494,13 +504,23 @@
               </label>
               <label>
                 Fällig am
-                <input name="dueDate" type="date" required>
+                <input name="dueDate" type="date">
               </label>
               <label class="span-2">
                 Beschreibung
-                <textarea name="description" rows="4" placeholder="Kurze Arbeitsbeschreibung"></textarea>
+                <textarea name="description" rows="4"></textarea>
               </label>
-              <button class="primary-button span-2" type="submit">Auftrag speichern</button>
+              <div class="span-2">
+                <div class="section-divider">
+                  <p class="eyebrow">Checks</p>
+                  <h3>Prüfungen abarbeiten</h3>
+                </div>
+                <div class="check-list" id="workOrderCheckList"></div>
+              </div>
+              <div class="form-actions span-2">
+                <button class="primary-button" type="submit">Änderungen speichern</button>
+                <button class="ghost-button" type="button" id="workOrderDoneButton">Als erledigt markieren</button>
+              </div>
             </form>
           </article>
           </section>
@@ -539,6 +559,10 @@
                 Seriennummer
                 <input name="serialNumber" placeholder="optional">
               </label>
+              <label>
+                QR-Code
+                <input name="qrCode" placeholder="z.B. DRH-QR-001">
+              </label>
               <label class="span-2">
                 Kritikalität
                 <select name="criticality">
@@ -548,11 +572,43 @@
                   <option value="critical">Kritisch</option>
                 </select>
               </label>
+              <label class="span-2">
+                Objekt-Arbeitstext (HTML)
+                <textarea name="instructionsHtml" rows="6" placeholder="<p>Was ist an diesem Objekt zu tun?</p><img src=&quot;https://...&quot; alt=&quot;Bild&quot;>"></textarea>
+              </label>
               <div class="form-actions span-2">
                 <button class="primary-button" type="submit" id="assetSubmitButton">Objekt speichern</button>
                 <button class="ghost-button" type="button" id="assetNewButton">Neu</button>
               </div>
             </form>
+            <div class="asset-detail-panel" id="assetDetailPanel" hidden>
+              <div class="section-divider">
+                <p class="eyebrow">Objekt</p>
+                <h3>Checks, Pläne und fällige Aufträge</h3>
+              </div>
+              <form id="assetCheckForm" class="form-grid compact-form">
+                <input type="hidden" name="assetCheckAssetId" id="assetCheckAssetIdInput">
+                <label class="span-2">
+                  Neuer Check
+                  <input name="label" placeholder="z.B. Filter wechseln">
+                </label>
+                <button class="primary-button span-2" type="submit">Check hinzufügen</button>
+              </form>
+              <div class="asset-detail-grid">
+                <div>
+                  <h3>Checks</h3>
+                  <div class="check-list" id="assetCheckList"></div>
+                </div>
+                <div>
+                  <h3>Wartungspläne</h3>
+                  <div class="plan-list" id="assetMaintenancePlanList"></div>
+                </div>
+                <div>
+                  <h3>Fällige Aufträge</h3>
+                  <div class="plan-list" id="assetOpenOrderList"></div>
+                </div>
+              </div>
+            </div>
             <div class="asset-filter-bar" aria-label="Wartungsobjekte filtern">
               <label>
                 Suche
