@@ -41,6 +41,31 @@ async function waitForDatabase(maxAttempts = 45) {
   }
 }
 
+async function ensureApartmentBuildingDeleteRestriction() {
+  const [[constraint]] = await pool.query(`
+    SELECT DELETE_RULE AS deleteRule
+    FROM information_schema.REFERENTIAL_CONSTRAINTS
+    WHERE CONSTRAINT_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'apartments'
+      AND CONSTRAINT_NAME = 'fk_apartments_building'
+    LIMIT 1
+  `);
+
+  if (constraint?.deleteRule === "RESTRICT" || constraint?.deleteRule === "NO ACTION") {
+    return;
+  }
+
+  if (constraint) {
+    await pool.query("ALTER TABLE apartments DROP FOREIGN KEY fk_apartments_building");
+  }
+
+  await pool.query(`
+    ALTER TABLE apartments
+    ADD CONSTRAINT fk_apartments_building
+    FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE RESTRICT
+  `);
+}
+
 async function runMigrations() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS customers (
@@ -175,7 +200,7 @@ async function runMigrations() {
       notes TEXT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-      CONSTRAINT fk_apartments_building FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE CASCADE,
+      CONSTRAINT fk_apartments_building FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE RESTRICT,
       UNIQUE KEY uq_apartment_per_building (building_id, apartment_number),
       INDEX idx_apartments_customer (customer_id),
       INDEX idx_apartments_building (building_id),
@@ -183,6 +208,7 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
+  await ensureApartmentBuildingDeleteRestriction();
   await pool.query("ALTER TABLE buildings ADD COLUMN IF NOT EXISTS customer_id INT NULL AFTER id");
   await pool.query("ALTER TABLE buildings ADD COLUMN IF NOT EXISTS street VARCHAR(160) NULL AFTER name");
   await pool.query("ALTER TABLE buildings ADD COLUMN IF NOT EXISTS house_number VARCHAR(40) NULL AFTER street");
@@ -2358,6 +2384,21 @@ async function deleteBuilding(id) {
   const existingBuilding = await getBuildingById(id);
   if (!existingBuilding) {
     throw createError("Gebäude nicht gefunden.", 404);
+  }
+
+  const [[{ apartmentCount }]] = await pool.execute(
+    "SELECT COUNT(*) AS apartmentCount FROM apartments WHERE building_id = ?",
+    [id]
+  );
+  const linkedApartmentCount = Number(apartmentCount || 0);
+  if (linkedApartmentCount > 0) {
+    const apartmentLabel = linkedApartmentCount === 1
+      ? "eine Wohnung/ein Appartment"
+      : `${linkedApartmentCount} Wohnungen/Appartments`;
+    throw createError(
+      `Gebäude "${existingBuilding.name}" kann nicht gelöscht werden, weil noch ${apartmentLabel} verknüpft ${linkedApartmentCount === 1 ? "ist" : "sind"}. Bitte zuerst die Appartments löschen.`,
+      409
+    );
   }
 
   const connection = await pool.getConnection();

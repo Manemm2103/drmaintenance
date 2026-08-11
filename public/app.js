@@ -1598,7 +1598,7 @@ function renderProperties(properties = latestProperties) {
             <span>${building.apartments.length === 0 ? "Als Wartungsobjekt verfügbar" : `${building.apartments.length} Appartments`}</span>
           </div>
         </div>
-        <button class="compact-button" type="button" title="Gebäude löschen" aria-label="Gebäude löschen" data-delete-building="${building.id}">X</button>
+        <button class="compact-button" type="button" title="${building.apartments.length > 0 ? "Erst Appartments löschen" : "Gebäude löschen"}" aria-label="${building.apartments.length > 0 ? "Erst Appartments löschen" : "Gebäude löschen"}" data-delete-building="${building.id}">X</button>
       </div>
       ${building.apartments.length === 0
         ? '<span class="badge light">Gebäude ohne Appartments</span>'
@@ -2047,6 +2047,10 @@ function loadUserRoleIntoForm(role) {
   window.setTimeout(() => scrollToTarget("userRoleForm"), 0);
 }
 
+function findBuildingById(id) {
+  return latestProperties.find((building) => String(building.id) === String(id));
+}
+
 function findApartmentById(id) {
   for (const building of latestProperties) {
     const apartment = building.apartments.find((item) => String(item.id) === String(id));
@@ -2372,7 +2376,14 @@ async function deleteMaintenancePlan(id) {
 }
 
 async function deleteBuilding(id) {
-  if (!window.confirm("Gebäude wirklich löschen? Appartments und zugehörige Wartungspläne werden ebenfalls entfernt.")) {
+  const building = findBuildingById(id);
+  const apartmentCount = building?.apartments?.length || 0;
+  if (apartmentCount > 0) {
+    showToast(`Gebäude kann nicht gelöscht werden: Bitte zuerst ${apartmentCount === 1 ? "das verknüpfte Appartment" : `die ${apartmentCount} verknüpften Appartments`} löschen.`);
+    return;
+  }
+
+  if (!window.confirm("Gebäude wirklich löschen? Zugehörige Wartungspläne werden ebenfalls entfernt.")) {
     return;
   }
 
