@@ -1846,7 +1846,8 @@ function renderAssetAssignmentOptions(properties) {
 
 function renderMaintenanceTargetOptions(targets) {
   const currentValue = els.maintenanceTargetSelect.value;
-  els.maintenanceTargetSelect.innerHTML = '<option value="">Wartungsobjekt auswählen</option>' + targets.map((target) => (
+  const assetTargets = (targets || []).filter((target) => target.targetType === "asset");
+  els.maintenanceTargetSelect.innerHTML = '<option value="">Wartungsobjekt auswählen</option>' + assetTargets.map((target) => (
     `<option value="${target.targetType}:${target.targetId}">${escapeHtml(target.label)} - ${escapeHtml(target.subtitle || "")}</option>`
   )).join("");
   els.maintenanceTargetSelect.value = currentValue;
