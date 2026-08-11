@@ -90,6 +90,7 @@ const els = {
   customerNewButton: document.querySelector("#customerNewButton"),
   billingAddressDiffersInput: document.querySelector("#billingAddressDiffersInput"),
   billingFields: document.querySelector("#billingFields"),
+  countrySelects: document.querySelectorAll("[data-country-select]"),
   employeeForm: document.querySelector("#employeeForm"),
   employeeIdInput: document.querySelector("#employeeIdInput"),
   employeeSubmitButton: document.querySelector("#employeeSubmitButton"),
@@ -144,6 +145,205 @@ const maintenanceWeekdayFields = [
   { key: "maintenanceFriday", label: "Fr", defaultValue: true },
   { key: "maintenanceSaturday", label: "Sa", defaultValue: true },
   { key: "maintenanceSunday", label: "So", defaultValue: false }
+];
+
+const countryOptions = [
+  "Deutschland",
+  "Österreich",
+  "Schweiz",
+  "Afghanistan",
+  "Ägypten",
+  "Albanien",
+  "Algerien",
+  "Andorra",
+  "Angola",
+  "Antigua und Barbuda",
+  "Äquatorialguinea",
+  "Argentinien",
+  "Armenien",
+  "Aserbaidschan",
+  "Äthiopien",
+  "Australien",
+  "Bahamas",
+  "Bahrain",
+  "Bangladesch",
+  "Barbados",
+  "Belgien",
+  "Belize",
+  "Benin",
+  "Bhutan",
+  "Bolivien",
+  "Bosnien und Herzegowina",
+  "Botsuana",
+  "Brasilien",
+  "Brunei",
+  "Bulgarien",
+  "Burkina Faso",
+  "Burundi",
+  "Chile",
+  "China",
+  "Costa Rica",
+  "Dänemark",
+  "Demokratische Republik Kongo",
+  "Dominica",
+  "Dominikanische Republik",
+  "Dschibuti",
+  "Ecuador",
+  "El Salvador",
+  "Elfenbeinküste",
+  "Eritrea",
+  "Estland",
+  "Eswatini",
+  "Fidschi",
+  "Finnland",
+  "Frankreich",
+  "Gabun",
+  "Gambia",
+  "Georgien",
+  "Ghana",
+  "Grenada",
+  "Griechenland",
+  "Guatemala",
+  "Guinea",
+  "Guinea-Bissau",
+  "Guyana",
+  "Haiti",
+  "Honduras",
+  "Indien",
+  "Indonesien",
+  "Irak",
+  "Iran",
+  "Irland",
+  "Island",
+  "Israel",
+  "Italien",
+  "Jamaika",
+  "Japan",
+  "Jemen",
+  "Jordanien",
+  "Kambodscha",
+  "Kamerun",
+  "Kanada",
+  "Kap Verde",
+  "Kasachstan",
+  "Katar",
+  "Kenia",
+  "Kirgisistan",
+  "Kiribati",
+  "Kolumbien",
+  "Komoren",
+  "Kongo",
+  "Kosovo",
+  "Kroatien",
+  "Kuba",
+  "Kuwait",
+  "Laos",
+  "Lesotho",
+  "Lettland",
+  "Libanon",
+  "Liberia",
+  "Libyen",
+  "Liechtenstein",
+  "Litauen",
+  "Luxemburg",
+  "Madagaskar",
+  "Malawi",
+  "Malaysia",
+  "Malediven",
+  "Mali",
+  "Malta",
+  "Marokko",
+  "Marshallinseln",
+  "Mauretanien",
+  "Mauritius",
+  "Mexiko",
+  "Mikronesien",
+  "Moldau",
+  "Monaco",
+  "Mongolei",
+  "Montenegro",
+  "Mosambik",
+  "Myanmar",
+  "Namibia",
+  "Nauru",
+  "Nepal",
+  "Neuseeland",
+  "Nicaragua",
+  "Niederlande",
+  "Niger",
+  "Nigeria",
+  "Nordkorea",
+  "Nordmazedonien",
+  "Norwegen",
+  "Oman",
+  "Pakistan",
+  "Palau",
+  "Palästina",
+  "Panama",
+  "Papua-Neuguinea",
+  "Paraguay",
+  "Peru",
+  "Philippinen",
+  "Polen",
+  "Portugal",
+  "Ruanda",
+  "Rumänien",
+  "Russland",
+  "Salomonen",
+  "Sambia",
+  "Samoa",
+  "San Marino",
+  "São Tomé und Príncipe",
+  "Saudi-Arabien",
+  "Schweden",
+  "Senegal",
+  "Serbien",
+  "Seychellen",
+  "Sierra Leone",
+  "Simbabwe",
+  "Singapur",
+  "Slowakei",
+  "Slowenien",
+  "Somalia",
+  "Spanien",
+  "Sri Lanka",
+  "St. Kitts und Nevis",
+  "St. Lucia",
+  "St. Vincent und die Grenadinen",
+  "Südafrika",
+  "Sudan",
+  "Südkorea",
+  "Südsudan",
+  "Suriname",
+  "Syrien",
+  "Tadschikistan",
+  "Tansania",
+  "Thailand",
+  "Timor-Leste",
+  "Togo",
+  "Tonga",
+  "Trinidad und Tobago",
+  "Tschad",
+  "Tschechien",
+  "Tunesien",
+  "Türkei",
+  "Turkmenistan",
+  "Tuvalu",
+  "Uganda",
+  "Ukraine",
+  "Ungarn",
+  "Uruguay",
+  "Usbekistan",
+  "Vanuatu",
+  "Vatikanstadt",
+  "Venezuela",
+  "Vereinigte Arabische Emirate",
+  "Vereinigte Staaten",
+  "Vereinigtes Königreich",
+  "Vietnam",
+  "Weißrussland",
+  "Zentralafrikanische Republik",
+  "Zypern"
 ];
 
 const allowedMaintenanceHtmlTags = new Set([
@@ -408,8 +608,66 @@ function createSearchableSelect(select) {
   refreshSearchableSelect(select);
 }
 
+function ensureSelectOption(select, value) {
+  const normalizedValue = String(value || "").trim();
+  if (!select || !normalizedValue) {
+    return;
+  }
+
+  const exists = Array.from(select.options).some((option) => option.value === normalizedValue);
+  if (!exists) {
+    select.append(new Option(normalizedValue, normalizedValue));
+  }
+}
+
+function populateCountrySelects() {
+  els.countrySelects.forEach((select) => {
+    const currentValue = select.value || select.dataset.defaultCountry || "Deutschland";
+    select.innerHTML = '<option value="">Land auswählen</option>' + countryOptions.map((country) => (
+      `<option value="${escapeHtml(country)}">${escapeHtml(country)}</option>`
+    )).join("");
+    ensureSelectOption(select, currentValue);
+    select.value = currentValue;
+  });
+}
+
+function setSelectValue(select, value, fallback = "") {
+  const nextValue = value || fallback;
+  ensureSelectOption(select, nextValue);
+  select.value = nextValue;
+  syncSearchableSelect(select);
+}
+
+function syncCountrySelects() {
+  els.countrySelects.forEach(syncSearchableSelect);
+}
+
+function validateRequiredSearchableSelect(select, message) {
+  const state = searchableSelects.get(select);
+  if (!state) {
+    return Boolean(select?.value);
+  }
+
+  const exactOption = findExactSearchableOption(state, state.input.value);
+  if (exactOption) {
+    select.value = exactOption.value;
+    syncSearchableSelect(select);
+    return true;
+  }
+
+  if (select.value) {
+    return true;
+  }
+
+  showToast(message || "Bitte einen Eintrag aus der Liste auswählen.");
+  state.input.focus();
+  openSearchableSelect(select);
+  return false;
+}
+
 function initializeSearchableSelects() {
   [
+    ...els.countrySelects,
     els.assetPropertyTargetSelect,
     els.apartmentBuildingSelect,
     els.buildingCustomerSelect,
@@ -1528,6 +1786,7 @@ function getCustomerFormPayload() {
 
 function syncBillingAddressFields() {
   const isVisible = els.billingAddressDiffersInput.checked;
+  const billingCountrySelect = els.customerForm.elements.billingCountry;
   els.billingFields.hidden = !isVisible;
   els.billingFields.querySelectorAll("input").forEach((input) => {
     input.required = isVisible;
@@ -1535,12 +1794,17 @@ function syncBillingAddressFields() {
       input.value = "";
     }
   });
+  if (!isVisible || !billingCountrySelect.value || billingCountrySelect.value === "Deutschland") {
+    setSelectValue(billingCountrySelect, els.customerForm.elements.country.value || "Deutschland");
+  }
+  syncSearchableSelect(billingCountrySelect);
 }
 
 function resetCustomerForm() {
   els.customerForm.reset();
   els.customerIdInput.value = "";
-  els.customerForm.elements.country.value = "Deutschland";
+  setSelectValue(els.customerForm.elements.country, "Deutschland");
+  setSelectValue(els.customerForm.elements.billingCountry, "Deutschland");
   applyCustomerMaintenanceWeekdays();
   syncBillingAddressFields();
   els.customerSubmitButton.textContent = "Kunde speichern";
@@ -1558,7 +1822,7 @@ function loadCustomerIntoForm(customer) {
   els.customerForm.elements.houseNumber.value = customer.houseNumber || "";
   els.customerForm.elements.postalCode.value = customer.postalCode || "";
   els.customerForm.elements.city.value = customer.city || "";
-  els.customerForm.elements.country.value = customer.country || "Deutschland";
+  setSelectValue(els.customerForm.elements.country, customer.country, "Deutschland");
   els.customerForm.elements.billingAddressDiffers.checked = Number(customer.billingAddressDiffers) === 1;
   syncBillingAddressFields();
   els.customerForm.elements.billingRecipient.value = customer.billingRecipient || "";
@@ -1566,7 +1830,7 @@ function loadCustomerIntoForm(customer) {
   els.customerForm.elements.billingHouseNumber.value = customer.billingHouseNumber || "";
   els.customerForm.elements.billingPostalCode.value = customer.billingPostalCode || "";
   els.customerForm.elements.billingCity.value = customer.billingCity || "";
-  els.customerForm.elements.billingCountry.value = customer.billingCountry || customer.country || "Deutschland";
+  setSelectValue(els.customerForm.elements.billingCountry, customer.billingCountry || customer.country, "Deutschland");
   applyCustomerMaintenanceWeekdays(customer);
   els.customerForm.elements.notes.value = customer.notes || "";
   els.customerSubmitButton.textContent = "Änderungen speichern";
@@ -1656,7 +1920,7 @@ function findApartmentById(id) {
 function resetBuildingForm() {
   els.buildingForm.reset();
   els.buildingIdInput.value = "";
-  els.buildingForm.elements.country.value = "Deutschland";
+  setSelectValue(els.buildingForm.elements.country, "Deutschland");
   syncSearchableSelect(els.buildingCustomerSelect);
   els.buildingSubmitButton.textContent = "Gebäude speichern";
 }
@@ -1670,7 +1934,7 @@ function loadBuildingIntoForm(building) {
   els.buildingForm.elements.houseNumber.value = building.houseNumber || "";
   els.buildingForm.elements.postalCode.value = building.postalCode || "";
   els.buildingForm.elements.city.value = building.city || "";
-  els.buildingForm.elements.country.value = building.country || "Deutschland";
+  setSelectValue(els.buildingForm.elements.country, building.country, "Deutschland");
   syncSearchableSelect(els.buildingCustomerSelect);
   els.buildingSubmitButton.textContent = "Änderungen speichern";
   setView("gebaeude", { updateHash: true, scrollTop: false });
@@ -2467,6 +2731,13 @@ function bindEvents() {
 
   els.customerForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!validateRequiredSearchableSelect(els.customerForm.elements.country, "Bitte ein Land aus der Liste auswählen.")) {
+      return;
+    }
+    if (els.billingAddressDiffersInput.checked && !validateRequiredSearchableSelect(els.customerForm.elements.billingCountry, "Bitte ein RE-Land aus der Liste auswählen.")) {
+      return;
+    }
+
     const data = getCustomerFormPayload();
     const isUpdate = Boolean(data.id);
 
@@ -2509,10 +2780,18 @@ function bindEvents() {
 
   els.customerNewButton.addEventListener("click", resetCustomerForm);
   els.billingAddressDiffersInput.addEventListener("change", syncBillingAddressFields);
+  els.customerForm.elements.country.addEventListener("change", () => {
+    if (!els.billingAddressDiffersInput.checked) {
+      setSelectValue(els.customerForm.elements.billingCountry, els.customerForm.elements.country.value || "Deutschland");
+    }
+  });
 
   els.buildingForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     if (!validateSearchableSelect(els.buildingCustomerSelect, "Bitte einen Kunden aus der Liste auswählen oder das Feld leeren.")) {
+      return;
+    }
+    if (!validateRequiredSearchableSelect(els.buildingForm.elements.country, "Bitte ein Land aus der Liste auswählen.")) {
       return;
     }
 
@@ -2681,6 +2960,7 @@ function bindEvents() {
   els.userRoleNewButton.addEventListener("click", resetUserRoleForm);
 }
 
+populateCountrySelects();
 initializeSearchableSelects();
 syncBillingAddressFields();
 bindEvents();

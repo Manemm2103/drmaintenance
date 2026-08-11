@@ -204,7 +204,7 @@
                 </label>
                 <label>
                   Land
-                  <input name="country" placeholder="z.B. Deutschland" value="Deutschland">
+                  <select name="country" data-country-select data-default-country="Deutschland" required></select>
                 </label>
                 <div class="weekday-fields span-2" aria-label="Wunsch-Wartungstage">
                   <span>Wunsch-Wartungstage</span>
@@ -264,7 +264,7 @@
                   </label>
                   <label>
                     RE-Land
-                    <input name="billingCountry" placeholder="z.B. Deutschland">
+                    <select name="billingCountry" data-country-select data-default-country="Deutschland"></select>
                   </label>
                 </div>
                 <label class="span-2">
@@ -359,7 +359,7 @@
                   </label>
                   <label class="span-2">
                     Land
-                    <input name="country" placeholder="z.B. Deutschland" value="Deutschland">
+                    <select name="country" data-country-select data-default-country="Deutschland" required></select>
                   </label>
                   <div class="form-actions span-2">
                     <button class="primary-button" type="submit" id="buildingSubmitButton">Gebäude speichern</button>
