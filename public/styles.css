@@ -802,6 +802,10 @@ textarea {
   gap: 18px;
 }
 
+.single-property-form {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .section-divider {
   display: grid;
   gap: 4px;

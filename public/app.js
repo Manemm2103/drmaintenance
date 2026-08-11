@@ -49,6 +49,12 @@ const els = {
   propertyTypeFilter: document.querySelector("#propertyTypeFilter"),
   propertyFilterResetButton: document.querySelector("#propertyFilterResetButton"),
   propertyResultCount: document.querySelector("#propertyResultCount"),
+  apartmentList: document.querySelector("#apartmentList"),
+  apartmentSearchInput: document.querySelector("#apartmentSearchInput"),
+  apartmentBuildingFilter: document.querySelector("#apartmentBuildingFilter"),
+  apartmentCustomerFilter: document.querySelector("#apartmentCustomerFilter"),
+  apartmentFilterResetButton: document.querySelector("#apartmentFilterResetButton"),
+  apartmentResultCount: document.querySelector("#apartmentResultCount"),
   assetPropertyTargetSelect: document.querySelector("#assetPropertyTargetSelect"),
   apartmentBuildingSelect: document.querySelector("#apartmentBuildingSelect"),
   buildingCustomerSelect: document.querySelector("#buildingCustomerSelect"),
@@ -412,11 +418,19 @@ const viewConfig = {
   },
   gebaeude: {
     eyebrow: "Gebäude",
-    title: "Gebäude und Appartments verwalten.",
+    title: "Gebäude verwalten.",
     actionLabel: "Gebäude",
     actionTitle: "Neues Gebäude erfassen",
     actionView: "gebaeude",
     scrollTarget: "buildingForm"
+  },
+  appartments: {
+    eyebrow: "Wohnungen",
+    title: "Wohnungen und Appartments verwalten.",
+    actionLabel: "Wohnung",
+    actionTitle: "Neue Wohnung erfassen",
+    actionView: "appartments",
+    scrollTarget: "apartmentForm"
   },
   planung: {
     eyebrow: "Planung",
@@ -452,6 +466,8 @@ const hashViewMap = {
   kunden: "kunden",
   wartungsobjekte: "wartungsobjekte",
   gebaeude: "gebaeude",
+  appartments: "appartments",
+  wohnungen: "appartments",
   planung: "planung",
   "new-maintenance": "planung",
   mitarbeiter: "mitarbeiter",
@@ -1431,14 +1447,7 @@ function getPropertySearchText(building) {
     building.customerNumber,
     building.customerName,
     building.buildingType,
-    getPropertyAddressLabel(building),
-    ...(building.apartments || []).flatMap((apartment) => [
-      apartment.apartmentNumber,
-      apartment.name,
-      apartment.floor,
-      apartment.customerNumber,
-      apartment.customerName
-    ])
+    getPropertyAddressLabel(building)
   ].filter(Boolean).join(" ");
 }
 
@@ -1451,13 +1460,52 @@ function getFilteredProperties(properties) {
   return (properties || []).filter((building) => {
     const searchText = normalizeSearchValue(getPropertySearchText(building));
     const addressText = normalizeSearchValue(getPropertyAddressLabel(building) || "");
-    const hasCustomer = String(building.customerId || "") === customerId
-      || (building.apartments || []).some((apartment) => String(apartment.customerId || "") === customerId);
 
     return (!search || searchText.includes(search))
-      && (!customerId || hasCustomer)
+      && (!customerId || String(building.customerId || "") === customerId)
       && (!address || addressText.includes(address))
       && (!buildingType || building.buildingType === buildingType);
+  });
+}
+
+function getAllApartments(properties = latestProperties) {
+  return (properties || []).flatMap((building) => (building.apartments || []).map((apartment) => ({
+    ...apartment,
+    buildingName: building.name,
+    buildingAddress: getPropertyAddressLabel(building),
+    buildingCustomerId: building.customerId,
+    buildingCustomerNumber: building.customerNumber,
+    buildingCustomerName: building.customerName
+  })));
+}
+
+function getApartmentSearchText(apartment) {
+  return [
+    apartment.apartmentNumber,
+    apartment.name,
+    apartment.floor,
+    apartment.customerNumber,
+    apartment.customerName,
+    apartment.buildingName,
+    apartment.buildingAddress,
+    apartment.buildingCustomerNumber,
+    apartment.buildingCustomerName
+  ].filter(Boolean).join(" ");
+}
+
+function getFilteredApartments(apartments) {
+  const search = normalizeSearchValue(els.apartmentSearchInput.value);
+  const buildingId = els.apartmentBuildingFilter.value;
+  const customerId = els.apartmentCustomerFilter.value;
+
+  return (apartments || []).filter((apartment) => {
+    const searchText = normalizeSearchValue(getApartmentSearchText(apartment));
+    const matchesCustomer = String(apartment.customerId || "") === customerId
+      || String(apartment.buildingCustomerId || "") === customerId;
+
+    return (!search || searchText.includes(search))
+      && (!buildingId || String(apartment.buildingId || "") === buildingId)
+      && (!customerId || matchesCustomer);
   });
 }
 
@@ -1465,6 +1513,7 @@ function renderProperties(properties = latestProperties) {
   latestProperties = properties || [];
   renderApartmentBuildingOptions(properties);
   renderAssetAssignmentOptions(properties);
+  renderApartments(properties);
 
   if (!properties || properties.length === 0) {
     els.propertyList.innerHTML = '<div class="list-item">Keine Gebäude angelegt.</div>';
@@ -1476,7 +1525,7 @@ function renderProperties(properties = latestProperties) {
   els.propertyResultCount.textContent = `${filteredProperties.length} von ${properties.length} Gebäude`;
 
   if (filteredProperties.length === 0) {
-    els.propertyList.innerHTML = '<div class="list-item">Keine Gebäude oder Appartments für diesen Filter.</div>';
+    els.propertyList.innerHTML = '<div class="list-item">Keine Gebäude für diesen Filter.</div>';
     return;
   }
 
@@ -1496,19 +1545,47 @@ function renderProperties(properties = latestProperties) {
       </div>
       ${building.apartments.length === 0
         ? '<span class="badge light">Gebäude ohne Appartments</span>'
-        : `<div class="apartment-list">
-            ${building.apartments.map((apartment) => `
-              <div class="apartment-chip clickable-list-item" role="button" tabindex="0" data-edit-apartment="${apartment.id}" title="Appartment bearbeiten">
-                <div>
-                  <span>${escapeHtml(apartment.name)}</span>
-                  <span class="muted">${escapeHtml(apartment.apartmentNumber)}${apartment.floor ? ` - ${escapeHtml(apartment.floor)}` : ""}</span>
-                  <span class="muted">${escapeHtml(formatCustomerLabel(apartment.customerNumber, apartment.customerName))}</span>
-                </div>
-                <button class="compact-button" type="button" title="Appartment löschen" aria-label="Appartment löschen" data-delete-apartment="${apartment.id}">X</button>
-              </div>
-            `).join("")}
-          </div>`
+        : '<span class="badge">Wohnungen separat verwalten</span>'
       }
+    </div>
+  `).join("");
+}
+
+function renderApartments(properties = latestProperties) {
+  const apartments = getAllApartments(properties);
+  if (!els.apartmentList) {
+    return;
+  }
+
+  if (apartments.length === 0) {
+    els.apartmentList.innerHTML = '<div class="list-item">Keine Wohnungen oder Appartments angelegt.</div>';
+    els.apartmentResultCount.textContent = "0 Wohnungen";
+    return;
+  }
+
+  const filteredApartments = getFilteredApartments(apartments);
+  els.apartmentResultCount.textContent = `${filteredApartments.length} von ${apartments.length} Wohnungen`;
+
+  if (filteredApartments.length === 0) {
+    els.apartmentList.innerHTML = '<div class="list-item">Keine Wohnungen für diesen Filter.</div>';
+    return;
+  }
+
+  els.apartmentList.innerHTML = filteredApartments.map((apartment) => `
+    <div class="user-item clickable-list-item" role="button" tabindex="0" data-edit-apartment="${apartment.id}" title="Wohnung bearbeiten">
+      <div>
+        <strong>${escapeHtml(apartment.name)}</strong>
+        <div class="list-meta">
+          <span>${escapeHtml(apartment.apartmentNumber)}</span>
+          ${apartment.floor ? `<span>${escapeHtml(apartment.floor)}</span>` : ""}
+          <span>${escapeHtml(apartment.buildingName || "Kein Gebäude")}</span>
+          <span>${escapeHtml(apartment.buildingAddress || "Keine Adresse")}</span>
+          <span>${escapeHtml(formatCustomerLabel(apartment.customerNumber || apartment.buildingCustomerNumber, apartment.customerName || apartment.buildingCustomerName))}</span>
+        </div>
+      </div>
+      <div class="user-actions">
+        <button class="compact-button" type="button" title="Appartment löschen" aria-label="Appartment löschen" data-delete-apartment="${apartment.id}">X</button>
+      </div>
     </div>
   `).join("");
 }
@@ -1566,6 +1643,7 @@ function renderCustomerOptions(customers) {
   const buildingValue = els.buildingCustomerSelect.value;
   const apartmentValue = els.apartmentCustomerSelect.value;
   const propertyFilterValue = els.propertyCustomerFilter.value;
+  const apartmentFilterValue = els.apartmentCustomerFilter.value;
   const options = (customers || []).map((customer) => (
     `<option value="${customer.id}">${escapeHtml(formatCustomerLabel(customer.customerNumber, customer.name))}</option>`
   )).join("");
@@ -1573,9 +1651,11 @@ function renderCustomerOptions(customers) {
   els.buildingCustomerSelect.innerHTML = '<option value="">Kein Kunde zugewiesen</option>' + options;
   els.apartmentCustomerSelect.innerHTML = '<option value="">Wie Gebäude / kein Kunde</option>' + options;
   els.propertyCustomerFilter.innerHTML = '<option value="">Alle Kunden</option>' + options;
+  els.apartmentCustomerFilter.innerHTML = '<option value="">Alle Kunden</option>' + options;
   els.buildingCustomerSelect.value = buildingValue;
   els.apartmentCustomerSelect.value = apartmentValue;
   els.propertyCustomerFilter.value = propertyFilterValue;
+  els.apartmentCustomerFilter.value = apartmentFilterValue;
   refreshSearchableSelect(els.buildingCustomerSelect);
   refreshSearchableSelect(els.apartmentCustomerSelect);
 }
@@ -1603,10 +1683,14 @@ function renderUserRoleOptions(userRoles) {
 
 function renderApartmentBuildingOptions(properties) {
   const currentValue = els.apartmentBuildingSelect.value;
-  els.apartmentBuildingSelect.innerHTML = '<option value="">Gebäude auswählen</option>' + properties.map((building) => (
+  const filterValue = els.apartmentBuildingFilter.value;
+  const options = properties.map((building) => (
     `<option value="${building.id}">${escapeHtml(building.name)}${building.customerNumber ? ` - ${escapeHtml(building.customerNumber)}` : ""}</option>`
   )).join("");
+  els.apartmentBuildingSelect.innerHTML = '<option value="">Gebäude auswählen</option>' + options;
+  els.apartmentBuildingFilter.innerHTML = '<option value="">Alle Gebäude</option>' + options;
   els.apartmentBuildingSelect.value = currentValue;
+  els.apartmentBuildingFilter.value = filterValue;
   refreshSearchableSelect(els.apartmentBuildingSelect);
 }
 
@@ -1959,7 +2043,7 @@ function loadApartmentIntoForm(apartment) {
   syncSearchableSelect(els.apartmentBuildingSelect);
   syncSearchableSelect(els.apartmentCustomerSelect);
   els.apartmentSubmitButton.textContent = "Änderungen speichern";
-  setView("gebaeude", { updateHash: true, scrollTop: false });
+  setView("appartments", { updateHash: true, scrollTop: false });
   window.setTimeout(() => scrollToTarget("apartmentForm"), 0);
 }
 
@@ -2319,6 +2403,16 @@ function bindEvents() {
     els.propertyCustomerFilter.value = "";
     els.propertyTypeFilter.value = "";
     renderProperties(latestProperties);
+  });
+
+  els.apartmentSearchInput.addEventListener("input", () => renderApartments(latestProperties));
+  els.apartmentBuildingFilter.addEventListener("change", () => renderApartments(latestProperties));
+  els.apartmentCustomerFilter.addEventListener("change", () => renderApartments(latestProperties));
+  els.apartmentFilterResetButton.addEventListener("click", () => {
+    els.apartmentSearchInput.value = "";
+    els.apartmentBuildingFilter.value = "";
+    els.apartmentCustomerFilter.value = "";
+    renderApartments(latestProperties);
   });
 
   els.prevMonthButton.addEventListener("click", () => {

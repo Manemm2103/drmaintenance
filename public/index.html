@@ -25,6 +25,7 @@
           <a href="#kunden" data-view-link="kunden">Kunden</a>
           <a href="#wartungsobjekte" data-view-link="wartungsobjekte">Objekte</a>
           <a href="#gebaeude" data-view-link="gebaeude">Gebäude</a>
+          <a href="#appartments" data-view-link="appartments">Wohnungen</a>
           <a href="#planung" data-view-link="planung">Wartungspläne</a>
           <a href="#mitarbeiter" data-view-link="mitarbeiter">Mitarbeiter</a>
           <a href="#benutzer" data-view-link="benutzer">Benutzer</a>
@@ -315,11 +316,11 @@
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Gebäude</p>
-                <h2>Gebäude und Appartments</h2>
+                <h2>Gebäude</h2>
               </div>
             </div>
             <div class="property-layout">
-              <div class="property-forms">
+              <div class="property-forms single-property-form">
                 <form id="buildingForm" class="form-grid">
                   <input type="hidden" name="buildingId" id="buildingIdInput">
                   <label class="span-2">
@@ -366,43 +367,11 @@
                     <button class="ghost-button" type="button" id="buildingNewButton">Neu</button>
                   </div>
                 </form>
-
-                <form id="apartmentForm" class="form-grid">
-                  <input type="hidden" name="apartmentId" id="apartmentIdInput">
-                  <label>
-                    Gebäude
-                    <select name="buildingId" id="apartmentBuildingSelect" required>
-                      <option value="">Gebäude auswählen</option>
-                    </select>
-                  </label>
-                  <label>
-                    Kunde
-                    <select name="customerId" id="apartmentCustomerSelect">
-                      <option value="">Wie Gebäude / kein Kunde</option>
-                    </select>
-                  </label>
-                  <label>
-                    Nummer
-                    <input name="apartmentNumber" placeholder="z.B. EG-01" required>
-                  </label>
-                  <label>
-                    Name
-                    <input name="name" placeholder="z.B. Wohnung EG links" required>
-                  </label>
-                  <label>
-                    Etage
-                    <input name="floor" placeholder="z.B. EG">
-                  </label>
-                  <div class="form-actions span-2">
-                    <button class="primary-button" type="submit" id="apartmentSubmitButton">Appartment speichern</button>
-                    <button class="ghost-button" type="button" id="apartmentNewButton">Neu</button>
-                  </div>
-                </form>
               </div>
-              <div class="asset-filter-bar" aria-label="Gebäude und Appartments filtern">
+              <div class="asset-filter-bar" aria-label="Gebäude filtern">
                 <label>
                   Suche
-                  <input id="propertySearchInput" placeholder="Gebäude, Appartment, Nummer, Etage">
+                  <input id="propertySearchInput" placeholder="Gebäude, Straße, Ort">
                 </label>
                 <label>
                   Kunde
@@ -430,6 +399,75 @@
                 </div>
               </div>
               <div class="property-list" id="propertyList"></div>
+            </div>
+          </article>
+          </section>
+        </section>
+
+        <section class="view" data-view="appartments">
+          <section class="workspace-grid single-view-grid">
+          <article class="panel wide" id="appartments">
+            <div class="panel-header">
+              <div>
+                <p class="eyebrow">Wohnungen</p>
+                <h2>Wohnungen / Appartments</h2>
+              </div>
+            </div>
+            <div class="property-layout">
+              <form id="apartmentForm" class="form-grid">
+                <input type="hidden" name="apartmentId" id="apartmentIdInput">
+                <label>
+                  Gebäude
+                  <select name="buildingId" id="apartmentBuildingSelect" required>
+                    <option value="">Gebäude auswählen</option>
+                  </select>
+                </label>
+                <label>
+                  Kunde
+                  <select name="customerId" id="apartmentCustomerSelect">
+                    <option value="">Wie Gebäude / kein Kunde</option>
+                  </select>
+                </label>
+                <label>
+                  Nummer
+                  <input name="apartmentNumber" placeholder="z.B. EG-01" required>
+                </label>
+                <label>
+                  Name
+                  <input name="name" placeholder="z.B. Wohnung EG links" required>
+                </label>
+                <label>
+                  Etage
+                  <input name="floor" placeholder="z.B. EG">
+                </label>
+                <div class="form-actions span-2">
+                  <button class="primary-button" type="submit" id="apartmentSubmitButton">Appartment speichern</button>
+                  <button class="ghost-button" type="button" id="apartmentNewButton">Neu</button>
+                </div>
+              </form>
+              <div class="asset-filter-bar" aria-label="Wohnungen und Appartments filtern">
+                <label>
+                  Suche
+                  <input id="apartmentSearchInput" placeholder="Wohnung, Appartment, Nummer, Etage">
+                </label>
+                <label>
+                  Gebäude
+                  <select id="apartmentBuildingFilter">
+                    <option value="">Alle Gebäude</option>
+                  </select>
+                </label>
+                <label>
+                  Kunde
+                  <select id="apartmentCustomerFilter">
+                    <option value="">Alle Kunden</option>
+                  </select>
+                </label>
+                <div class="filter-actions">
+                  <span id="apartmentResultCount" class="muted">0 Wohnungen</span>
+                  <button class="ghost-button" type="button" id="apartmentFilterResetButton">Filter zurücksetzen</button>
+                </div>
+              </div>
+              <div class="property-list" id="apartmentList"></div>
             </div>
           </article>
           </section>
