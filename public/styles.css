@@ -345,6 +345,19 @@ h2 {
   flex-direction: column;
   justify-content: space-between;
   padding: 18px;
+  color: var(--text);
+  text-align: left;
+}
+
+button.metric-card {
+  width: 100%;
+}
+
+button.metric-card:hover,
+button.metric-card:focus-visible {
+  border-color: var(--text);
+  outline: none;
+  transform: translateY(-1px);
 }
 
 .metric-card span {

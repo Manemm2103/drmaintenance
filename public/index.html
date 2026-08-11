@@ -57,26 +57,26 @@
 
         <section class="view is-active" data-view="dashboard">
           <section class="kpi-grid" aria-label="Kennzahlen">
-            <article class="metric-card">
+            <button class="metric-card" type="button" data-dashboard-target="wartungsobjekte" data-scroll-target="wartungsobjekte" title="Wartungsobjekte öffnen">
               <span>Wartungsobjekte</span>
               <strong id="assetCount">-</strong>
-            </article>
-            <article class="metric-card">
+            </button>
+            <button class="metric-card" type="button" data-dashboard-target="planung" data-scroll-target="planung" title="Aktive Wartungspläne öffnen">
               <span>Aktive Pläne</span>
               <strong id="planCount">-</strong>
-            </article>
-            <article class="metric-card">
+            </button>
+            <button class="metric-card" type="button" data-dashboard-target="auftraege" data-work-order-filter="open" title="Offene Aufträge öffnen">
               <span>Offene Aufträge</span>
               <strong id="orderCount">-</strong>
-            </article>
-            <article class="metric-card urgent">
+            </button>
+            <button class="metric-card urgent" type="button" data-dashboard-target="auftraege" data-work-order-filter="overdue" title="Überfällige Aufträge öffnen">
               <span>Überfällig</span>
               <strong id="overdueCount">-</strong>
-            </article>
-            <article class="metric-card">
+            </button>
+            <button class="metric-card" type="button" data-dashboard-target="kunden" data-scroll-target="kunden" title="Kunden öffnen">
               <span>Kunden</span>
               <strong id="customerCount">-</strong>
-            </article>
+            </button>
           </section>
 
           <section class="workspace-grid">

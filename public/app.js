@@ -2159,6 +2159,29 @@ async function loadWorkOrders() {
   renderWorkOrders(workOrders);
 }
 
+async function openDashboardTarget(targetButton) {
+  const targetView = targetButton.dataset.dashboardTarget;
+  if (!targetView) {
+    return;
+  }
+
+  if (targetView === "auftraege" && targetButton.dataset.workOrderFilter) {
+    els.workOrderStatusFilter.value = targetButton.dataset.workOrderFilter;
+    await loadWorkOrders();
+  }
+
+  setView(targetView, {
+    updateHash: true,
+    scrollTop: false
+  });
+
+  if (targetButton.dataset.scrollTarget) {
+    window.setTimeout(() => scrollToTarget(targetButton.dataset.scrollTarget), 0);
+  } else {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+}
+
 async function loadWorkOrderIntoDetail(id) {
   const order = await api(`/api/work-orders/${id}`);
   renderWorkOrderDetail(order);
@@ -2426,6 +2449,12 @@ function bindEvents() {
   });
 
   document.addEventListener("click", (event) => {
+    const dashboardTarget = event.target.closest("[data-dashboard-target]");
+    if (dashboardTarget) {
+      openDashboardTarget(dashboardTarget).catch((error) => showToast(error.message));
+      return;
+    }
+
     const scrollTarget = event.target.closest("[data-scroll-target]");
     if (scrollTarget) {
       if (scrollTarget.dataset.viewTarget) {
