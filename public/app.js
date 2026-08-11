@@ -694,6 +694,7 @@ function validateRequiredSearchableSelect(select, message) {
 function initializeSearchableSelects() {
   [
     ...els.countrySelects,
+    els.assetCustomerFilter,
     els.assetPropertyTargetSelect,
     els.apartmentBuildingSelect,
     els.buildingCustomerSelect,
@@ -1107,6 +1108,7 @@ function renderAssetCustomerFilterOptions(customers) {
     `<option value="${customer.id}">${escapeHtml(formatCustomerLabel(customer.customerNumber, customer.name))}</option>`
   )).join("");
   els.assetCustomerFilter.value = currentValue;
+  refreshSearchableSelect(els.assetCustomerFilter);
 }
 
 function renderAssets(assets = latestAssets) {
@@ -2758,6 +2760,7 @@ function bindEvents() {
     els.assetAddressFilterInput.value = "";
     els.assetCustomerFilter.value = "";
     els.assetCriticalityFilter.value = "";
+    syncSearchableSelect(els.assetCustomerFilter);
     renderAssets(latestAssets);
   });
   els.assetInstructionsEditor.addEventListener("input", syncAssetInstructionsEditorToInput);
