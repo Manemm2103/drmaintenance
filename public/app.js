@@ -1863,6 +1863,34 @@ function renderApartmentBuildingOptions(properties) {
   refreshSearchableSelect(els.apartmentBuildingSelect);
 }
 
+function formatAssignmentCustomerLabel(customerNumber, customerName) {
+  const customerLabel = formatCustomerLabel(customerNumber, customerName);
+  return customerLabel === "Kein Kunde" ? "" : customerLabel;
+}
+
+function formatBuildingAssignmentLabel(building) {
+  return [
+    formatAssignmentCustomerLabel(building.customerNumber, building.customerName),
+    building.name,
+    "Gebäude ohne Appartment",
+    getPropertyAddressLabel(building)
+  ].filter(Boolean).join(" | ");
+}
+
+function formatApartmentAssignmentLabel(building, apartment) {
+  const apartmentLabel = [
+    apartment.apartmentNumber ? `Appartment ${apartment.apartmentNumber}` : "Appartment",
+    apartment.name
+  ].filter(Boolean).join(" - ");
+
+  return [
+    formatAssignmentCustomerLabel(apartment.customerNumber || building.customerNumber, apartment.customerName || building.customerName),
+    building.name,
+    apartmentLabel,
+    getPropertyAddressLabel(building)
+  ].filter(Boolean).join(" | ");
+}
+
 function renderAssetAssignmentOptions(properties) {
   const currentValue = els.assetPropertyTargetSelect.value;
   const options = [];
@@ -1871,12 +1899,12 @@ function renderAssetAssignmentOptions(properties) {
     if (building.apartments?.length > 0) {
       for (const apartment of building.apartments) {
         options.push(
-          `<option value="apartment:${apartment.id}">${escapeHtml(building.name)} / ${escapeHtml(apartment.name)}${apartment.customerNumber ? ` - ${escapeHtml(apartment.customerNumber)}` : ""}</option>`
+          `<option value="apartment:${apartment.id}">${escapeHtml(formatApartmentAssignmentLabel(building, apartment))}</option>`
         );
       }
     } else {
       options.push(
-        `<option value="building:${building.id}">${escapeHtml(building.name)}${building.customerNumber ? ` - ${escapeHtml(building.customerNumber)}` : ""}</option>`
+        `<option value="building:${building.id}">${escapeHtml(formatBuildingAssignmentLabel(building))}</option>`
       );
     }
   }
