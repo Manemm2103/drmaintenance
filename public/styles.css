@@ -1011,6 +1011,28 @@ textarea {
   margin: 2px 0 18px;
 }
 
+.asset-check-builder {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fbfbf8;
+}
+
+.asset-check-builder h3 {
+  margin: 0;
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.inline-check-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
 .asset-save-actions {
   margin: 0 0 18px;
 }
@@ -1102,6 +1124,7 @@ textarea {
   .weekday-fields,
   .asset-filter-bar,
   .asset-detail-grid,
+  .inline-check-form,
   .users-layout,
   .property-forms {
     grid-template-columns: 1fr;

@@ -3505,9 +3505,88 @@ async function assertAssetAssignment(asset) {
   }
 }
 
+function normalizeAssetCheckLabels(labels) {
+  if (!Array.isArray(labels)) {
+    return [];
+  }
+
+  const seenLabels = new Set();
+  return labels.reduce((normalizedLabels, rawLabel) => {
+    const label = normalizeText(rawLabel);
+    const labelKey = label?.toLocaleLowerCase("de-DE");
+    if (!label || seenLabels.has(labelKey)) {
+      return normalizedLabels;
+    }
+
+    seenLabels.add(labelKey);
+    normalizedLabels.push(label);
+    return normalizedLabels;
+  }, []);
+}
+
+async function insertAssetCheck(assetId, label) {
+  const [[{ nextSortOrder }]] = await pool.execute(
+    "SELECT COALESCE(MAX(sort_order), -1) + 1 AS nextSortOrder FROM asset_checks WHERE asset_id = ?",
+    [assetId]
+  );
+
+  const [result] = await pool.execute(
+    "INSERT INTO asset_checks (asset_id, label, sort_order) VALUES (?, ?, ?)",
+    [assetId, label, nextSortOrder]
+  );
+
+  await pool.execute(
+    `
+      INSERT IGNORE INTO work_order_checks (work_order_id, asset_check_id, label)
+      SELECT wo.id, ?, ?
+      FROM work_orders wo
+      WHERE wo.asset_id = ?
+        AND wo.status <> 'done'
+    `,
+    [result.insertId, label, assetId]
+  );
+
+  return result.insertId;
+}
+
+async function createAssetChecksFromLabels(assetId, labels, assetName) {
+  const normalizedLabels = normalizeAssetCheckLabels(labels);
+  if (normalizedLabels.length === 0) {
+    return [];
+  }
+
+  const [existingChecks] = await pool.execute(
+    "SELECT label FROM asset_checks WHERE asset_id = ?",
+    [assetId]
+  );
+  const existingLabelKeys = new Set(existingChecks.map((check) => check.label.toLocaleLowerCase("de-DE")));
+  const insertedLabels = [];
+
+  for (const label of normalizedLabels) {
+    const labelKey = label.toLocaleLowerCase("de-DE");
+    if (existingLabelKeys.has(labelKey)) {
+      continue;
+    }
+
+    await insertAssetCheck(assetId, label);
+    existingLabelKeys.add(labelKey);
+    insertedLabels.push(label);
+  }
+
+  if (insertedLabels.length > 0) {
+    await pool.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
+      [assetId, `${insertedLabels.length} Checkpunkte am Wartungsobjekt "${assetName}" angelegt.`]
+    );
+  }
+
+  return insertedLabels;
+}
+
 async function createAsset(input) {
   const asset = normalizeAssetInput(input);
   await assertAssetAssignment(asset);
+  const checkLabels = normalizeAssetCheckLabels(input.checkLabels);
 
   let result;
   try {
@@ -3532,6 +3611,7 @@ async function createAsset(input) {
     handleDuplicateAsset(error);
   }
 
+  await createAssetChecksFromLabels(result.insertId, checkLabels, asset.name);
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
     [result.insertId, `Wartungsobjekt "${asset.name}" angelegt.`]
@@ -3600,6 +3680,7 @@ async function updateAsset(id, input) {
 
   const asset = normalizeAssetInput(input);
   await assertAssetAssignment(asset);
+  const checkLabels = normalizeAssetCheckLabels(input.checkLabels);
 
   try {
     await pool.execute(
@@ -3625,6 +3706,7 @@ async function updateAsset(id, input) {
     handleDuplicateAsset(error);
   }
 
+  await createAssetChecksFromLabels(id, checkLabels, asset.name);
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
     [id, `Wartungsobjekt "${asset.name}" aktualisiert.`]
@@ -3677,26 +3759,7 @@ async function createAssetCheck(assetId, input) {
     throw createError("Check ist ein Pflichtfeld.", 400);
   }
 
-  const [[{ nextSortOrder }]] = await pool.execute(
-    "SELECT COALESCE(MAX(sort_order), -1) + 1 AS nextSortOrder FROM asset_checks WHERE asset_id = ?",
-    [assetId]
-  );
-
-  const [result] = await pool.execute(
-    "INSERT INTO asset_checks (asset_id, label, sort_order) VALUES (?, ?, ?)",
-    [assetId, label, nextSortOrder]
-  );
-
-  await pool.execute(
-    `
-      INSERT IGNORE INTO work_order_checks (work_order_id, asset_check_id, label)
-      SELECT wo.id, ?, ?
-      FROM work_orders wo
-      WHERE wo.asset_id = ?
-        AND wo.status <> 'done'
-    `,
-    [result.insertId, label, assetId]
-  );
+  await insertAssetCheck(assetId, label);
 
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",

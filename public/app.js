@@ -89,6 +89,9 @@ const els = {
   assetCheckForm: document.querySelector("#assetCheckForm"),
   assetCheckAssetIdInput: document.querySelector("#assetCheckAssetIdInput"),
   assetCheckList: document.querySelector("#assetCheckList"),
+  assetDraftCheckInput: document.querySelector("#assetDraftCheckInput"),
+  assetDraftCheckAddButton: document.querySelector("#assetDraftCheckAddButton"),
+  assetDraftCheckList: document.querySelector("#assetDraftCheckList"),
   assetMaintenancePlanList: document.querySelector("#assetMaintenancePlanList"),
   assetOpenOrderList: document.querySelector("#assetOpenOrderList"),
   buildingForm: document.querySelector("#buildingForm"),
@@ -490,6 +493,7 @@ let latestPlans = [];
 let latestUserRoles = [];
 let latestWorkOrders = [];
 let activeWorkOrder = null;
+let draftAssetCheckLabels = [];
 const searchableSelects = new Map();
 
 async function api(path, options = {}) {
@@ -1156,6 +1160,48 @@ function renderAssetChecks(checks = []) {
       <button class="compact-button" type="button" title="Check löschen" aria-label="Check löschen" data-delete-asset-check="${check.id}">X</button>
     </div>
   `).join("");
+}
+
+function renderDraftAssetChecks() {
+  if (draftAssetCheckLabels.length === 0) {
+    els.assetDraftCheckList.innerHTML = '<div class="list-item">Noch keine neuen Checkpunkte vorbereitet.</div>';
+    return;
+  }
+
+  els.assetDraftCheckList.innerHTML = draftAssetCheckLabels.map((label, index) => `
+    <div class="list-item list-item-with-actions">
+      <strong>${escapeHtml(label)}</strong>
+      <button class="compact-button" type="button" title="Checkpunkt entfernen" aria-label="Checkpunkt entfernen" data-delete-draft-asset-check="${index}">X</button>
+    </div>
+  `).join("");
+}
+
+function addDraftAssetCheck() {
+  const label = els.assetDraftCheckInput.value.trim();
+  if (!label) {
+    return;
+  }
+
+  const labelKey = normalizeSearchValue(label);
+  const alreadyExists = draftAssetCheckLabels.some((existingLabel) => normalizeSearchValue(existingLabel) === labelKey);
+  if (!alreadyExists) {
+    draftAssetCheckLabels.push(label);
+  }
+
+  els.assetDraftCheckInput.value = "";
+  renderDraftAssetChecks();
+  els.assetDraftCheckInput.focus();
+}
+
+function removeDraftAssetCheck(index) {
+  draftAssetCheckLabels.splice(index, 1);
+  renderDraftAssetChecks();
+}
+
+function resetDraftAssetChecks() {
+  draftAssetCheckLabels = [];
+  els.assetDraftCheckInput.value = "";
+  renderDraftAssetChecks();
 }
 
 function renderAssetMaintenancePlans(plans = []) {
@@ -2003,7 +2049,8 @@ function getAssetFormPayload() {
     qrCode: data.qrCode,
     instructionsHtml: data.instructionsHtml,
     criticality: data.criticality,
-    propertyTarget: data.propertyTarget
+    propertyTarget: data.propertyTarget,
+    checkLabels: [...draftAssetCheckLabels]
   };
 }
 
@@ -2011,6 +2058,7 @@ function resetAssetForm() {
   els.assetForm.reset();
   els.assetIdInput.value = "";
   setAssetInstructionsHtml("");
+  resetDraftAssetChecks();
   syncSearchableSelect(els.assetPropertyTargetSelect);
   els.assetSubmitButton.textContent = "Objekt speichern";
   els.assetDetailPanel.hidden = true;
@@ -2029,6 +2077,7 @@ function loadAssetIntoForm(asset) {
   els.assetForm.elements.qrCode.value = asset.qrCode || "";
   els.assetForm.elements.criticality.value = asset.criticality || "medium";
   setAssetInstructionsHtml(asset.instructionsHtml || "");
+  resetDraftAssetChecks();
   els.assetForm.elements.propertyTarget.value = asset.assignmentType && asset.assignmentId
     ? `${asset.assignmentType}:${asset.assignmentId}`
     : "";
@@ -2690,6 +2739,13 @@ function bindEvents() {
   els.assetInstructionsEditor.addEventListener("blur", () => {
     setAssetInstructionsHtml(els.assetInstructionsEditor.innerHTML);
   });
+  els.assetDraftCheckAddButton.addEventListener("click", addDraftAssetCheck);
+  els.assetDraftCheckInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addDraftAssetCheck();
+    }
+  });
 
   els.planSearchInput.addEventListener("input", () => renderPlans(latestPlans));
   els.planEmployeeFilter.addEventListener("change", () => renderPlans(latestPlans));
@@ -2794,6 +2850,13 @@ function bindEvents() {
     if (deleteAssetCheckButton) {
       event.stopPropagation();
       deleteAssetCheck(deleteAssetCheckButton.dataset.deleteAssetCheck).catch((error) => showToast(error.message));
+      return;
+    }
+
+    const deleteDraftAssetCheckButton = event.target.closest("[data-delete-draft-asset-check]");
+    if (deleteDraftAssetCheckButton) {
+      event.stopPropagation();
+      removeDraftAssetCheck(Number(deleteDraftAssetCheckButton.dataset.deleteDraftAssetCheck));
       return;
     }
 
@@ -3440,6 +3503,7 @@ function bindEvents() {
 
 populateCountrySelects();
 setAssetInstructionsHtml("");
+resetDraftAssetChecks();
 initializeSearchableSelects();
 syncBillingAddressFields();
 bindEvents();
