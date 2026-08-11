@@ -43,6 +43,9 @@ const els = {
   refreshButton: document.querySelector("#refreshButton"),
   workOrderForm: document.querySelector("#workOrderForm"),
   maintenanceForm: document.querySelector("#maintenanceForm"),
+  maintenancePlanIdInput: document.querySelector("#maintenancePlanIdInput"),
+  maintenanceSubmitButton: document.querySelector("#maintenanceSubmitButton"),
+  maintenanceNewButton: document.querySelector("#maintenanceNewButton"),
   assetForm: document.querySelector("#assetForm"),
   assetIdInput: document.querySelector("#assetIdInput"),
   assetSubmitButton: document.querySelector("#assetSubmitButton"),
@@ -110,6 +113,29 @@ const maintenanceWeekdayFields = [
   { key: "maintenanceSaturday", label: "Sa", defaultValue: true },
   { key: "maintenanceSunday", label: "So", defaultValue: false }
 ];
+
+const allowedMaintenanceHtmlTags = new Set([
+  "a",
+  "br",
+  "div",
+  "em",
+  "figcaption",
+  "figure",
+  "h3",
+  "h4",
+  "img",
+  "li",
+  "ol",
+  "p",
+  "span",
+  "strong",
+  "ul"
+]);
+
+const allowedMaintenanceHtmlAttributes = {
+  a: new Set(["href", "target", "title"]),
+  img: new Set(["alt", "height", "src", "title", "width"])
+};
 
 const viewConfig = {
   dashboard: {
@@ -198,6 +224,7 @@ let latestAssets = [];
 let latestProperties = [];
 let latestCustomers = [];
 let latestEmployees = [];
+let latestPlans = [];
 const searchableSelects = new Map();
 
 async function api(path, options = {}) {
@@ -588,6 +615,7 @@ function renderSummary(payload) {
   latestAssets = assets || [];
   latestCustomers = customers || [];
   latestEmployees = employees || [];
+  latestPlans = plans || [];
 
   els.assetCount.textContent = summary.assetCount;
   els.planCount.textContent = summary.activePlanCount;
@@ -739,16 +767,16 @@ function renderPlans(plans) {
   }
 
   els.planList.innerHTML = plans.map((plan) => `
-    <div class="list-item list-item-with-actions">
+    <div class="list-item list-item-with-actions clickable-list-item" role="button" tabindex="0" data-edit-plan="${plan.id}" title="Wartungsplan bearbeiten">
       <div>
-        <strong>${escapeHtml(plan.title)}</strong>
+        <strong>${escapeHtml(plan.targetName || plan.title || "Wartungsobjekt")}</strong>
         <div class="list-meta">
-          <span>${escapeHtml(plan.targetName || "Kein Objekt")}</span>
           <span>${escapeHtml(plan.targetSubtitle || "")}</span>
           <span>${escapeHtml(plan.employeeName || "Kein Mitarbeiter")}</span>
           <span>${formatDate(plan.nextDueOn)}</span>
           <span>${plan.intervalDays} Tage</span>
         </div>
+        ${plan.instructionsHtml ? `<div class="maintenance-html-preview">${sanitizeMaintenanceHtml(plan.instructionsHtml)}</div>` : ""}
       </div>
       <button class="compact-button" type="button" title="Wartungsplan löschen" aria-label="Wartungsplan löschen" data-delete-plan="${plan.id}">X</button>
     </div>
@@ -934,9 +962,9 @@ function renderCalendar(events) {
       <button class="calendar-day ${dateKey === todayKey ? "is-today" : ""}" type="button" data-calendar-day="${dateKey}">
         <span class="calendar-date">${day}</span>
         ${dayEvents.slice(0, 3).map((event) => `
-          <span class="calendar-event" title="${escapeHtml(event.title)}">
-            ${escapeHtml(event.title)}
-            <small>${escapeHtml([event.targetName || "Kein Objekt", event.employeeName || "", event.intervalDays ? `alle ${event.intervalDays} Tage` : ""].filter(Boolean).join(" - "))}</small>
+          <span class="calendar-event" title="${escapeHtml(event.targetName || event.title)}">
+            ${escapeHtml(event.targetName || event.title)}
+            <small>${escapeHtml([event.employeeName || "", event.intervalDays ? `alle ${event.intervalDays} Tage` : ""].filter(Boolean).join(" - "))}</small>
           </span>
         `).join("")}
         ${dayEvents.length > 3 ? `<span class="muted">+${dayEvents.length - 3} weitere</span>` : ""}
@@ -1014,7 +1042,7 @@ function renderAssetAssignmentOptions(properties) {
 
 function renderMaintenanceTargetOptions(targets) {
   const currentValue = els.maintenanceTargetSelect.value;
-  els.maintenanceTargetSelect.innerHTML = '<option value="">Wartungsziel auswählen</option>' + targets.map((target) => (
+  els.maintenanceTargetSelect.innerHTML = '<option value="">Wartungsobjekt auswählen</option>' + targets.map((target) => (
     `<option value="${target.targetType}:${target.targetId}">${escapeHtml(target.label)} - ${escapeHtml(target.subtitle || "")}</option>`
   )).join("");
   els.maintenanceTargetSelect.value = currentValue;
@@ -1030,6 +1058,34 @@ function renderEmployeeOptions(employees) {
   }).join("");
   els.maintenanceEmployeeSelect.value = currentValue;
   refreshSearchableSelect(els.maintenanceEmployeeSelect);
+}
+
+function getMaintenancePlanTargetValue(plan) {
+  const targetType = plan.targetType || "asset";
+  const targetId = plan.targetId || plan.assetId;
+  return targetType && targetId ? `${targetType}:${targetId}` : "";
+}
+
+function resetMaintenanceForm() {
+  els.maintenanceForm.reset();
+  els.maintenancePlanIdInput.value = "";
+  syncSearchableSelect(els.maintenanceTargetSelect);
+  syncSearchableSelect(els.maintenanceEmployeeSelect);
+  els.maintenanceSubmitButton.textContent = "Wartungsplan speichern";
+}
+
+function loadMaintenancePlanIntoForm(plan) {
+  els.maintenanceForm.elements.maintenancePlanId.value = plan.id;
+  els.maintenanceForm.elements.target.value = getMaintenancePlanTargetValue(plan);
+  els.maintenanceForm.elements.employeeId.value = plan.employeeId || "";
+  els.maintenanceForm.elements.intervalDays.value = plan.intervalDays || 365;
+  els.maintenanceForm.elements.nextDueOn.value = plan.rawNextDueOn || plan.nextDueOn || "";
+  els.maintenanceForm.elements.instructionsHtml.value = plan.instructionsHtml || "";
+  syncSearchableSelect(els.maintenanceTargetSelect);
+  syncSearchableSelect(els.maintenanceEmployeeSelect);
+  els.maintenanceSubmitButton.textContent = "Änderungen speichern";
+  setView("planung", { updateHash: true, scrollTop: false });
+  window.setTimeout(() => scrollToTarget("new-maintenance"), 0);
 }
 
 function getAssetFormPayload() {
@@ -1262,6 +1318,79 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function isSafeMaintenanceHtmlUrl(value, allowDataImage = false) {
+  const trimmedValue = String(value || "").trim();
+  if (!trimmedValue) {
+    return false;
+  }
+
+  if (trimmedValue.startsWith("/") || trimmedValue.startsWith("./") || trimmedValue.startsWith("../")) {
+    return true;
+  }
+
+  if (allowDataImage && /^data:image\/(png|jpe?g|gif|webp);base64,/i.test(trimmedValue)) {
+    return true;
+  }
+
+  try {
+    const url = new URL(trimmedValue, window.location.origin);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch (_error) {
+    return false;
+  }
+}
+
+function sanitizeMaintenanceHtmlNode(node) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return document.createTextNode(node.textContent || "");
+  }
+
+  if (node.nodeType !== Node.ELEMENT_NODE) {
+    return document.createDocumentFragment();
+  }
+
+  const tagName = node.tagName.toLowerCase();
+  const fragment = document.createDocumentFragment();
+  if (!allowedMaintenanceHtmlTags.has(tagName)) {
+    node.childNodes.forEach((child) => fragment.append(sanitizeMaintenanceHtmlNode(child)));
+    return fragment;
+  }
+
+  const element = document.createElement(tagName);
+  const allowedAttributes = allowedMaintenanceHtmlAttributes[tagName] || new Set();
+  Array.from(node.attributes).forEach((attribute) => {
+    const attributeName = attribute.name.toLowerCase();
+    if (!allowedAttributes.has(attributeName)) {
+      return;
+    }
+
+    if (attributeName === "href" && !isSafeMaintenanceHtmlUrl(attribute.value)) {
+      return;
+    }
+
+    if (attributeName === "src" && !isSafeMaintenanceHtmlUrl(attribute.value, true)) {
+      return;
+    }
+
+    element.setAttribute(attributeName, attribute.value);
+  });
+
+  if (tagName === "a") {
+    element.setAttribute("rel", "noopener noreferrer");
+  }
+
+  node.childNodes.forEach((child) => element.append(sanitizeMaintenanceHtmlNode(child)));
+  return element;
+}
+
+function sanitizeMaintenanceHtml(html) {
+  const template = document.createElement("template");
+  template.innerHTML = String(html || "");
+  const output = document.createElement("div");
+  template.content.childNodes.forEach((child) => output.append(sanitizeMaintenanceHtmlNode(child)));
+  return output.innerHTML;
+}
+
 async function loadDashboard() {
   try {
     const range = getCalendarRange();
@@ -1381,6 +1510,7 @@ async function logout() {
 }
 
 function setMaintenanceDate(dateKey) {
+  resetMaintenanceForm();
   els.maintenanceDueDate.value = dateKey;
   setView("planung", { updateHash: true, scrollTop: false });
   window.setTimeout(() => scrollToTarget("new-maintenance"), 0);
@@ -1501,7 +1631,9 @@ function bindEvents() {
 
     const deletePlanButton = event.target.closest("[data-delete-plan]");
     if (deletePlanButton) {
+      event.stopPropagation();
       deleteMaintenancePlan(deletePlanButton.dataset.deletePlan).catch((error) => showToast(error.message));
+      return;
     }
 
     const deleteBuildingButton = event.target.closest("[data-delete-building]");
@@ -1540,6 +1672,16 @@ function bindEvents() {
       if (employee) {
         loadEmployeeIntoForm(employee);
       }
+      return;
+    }
+
+    const editPlan = event.target.closest("[data-edit-plan]");
+    if (editPlan) {
+      const plan = latestPlans.find((item) => String(item.id) === String(editPlan.dataset.editPlan));
+      if (plan) {
+        loadMaintenancePlanIntoForm(plan);
+      }
+      return;
     }
 
     const editApartment = event.target.closest("[data-edit-apartment]");
@@ -1647,7 +1789,7 @@ function bindEvents() {
 
   els.maintenanceForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!validateSearchableSelect(els.maintenanceTargetSelect, "Bitte ein Wartungsziel aus der Liste auswählen.")) {
+    if (!validateSearchableSelect(els.maintenanceTargetSelect, "Bitte ein Wartungsobjekt aus der Liste auswählen.")) {
       return;
     }
 
@@ -1657,25 +1799,26 @@ function bindEvents() {
 
     const data = Object.fromEntries(new FormData(els.maintenanceForm));
     const target = parseTargetValue(data.target);
+    const planId = data.maintenancePlanId ? Number(data.maintenancePlanId) : null;
 
-    await api("/api/maintenance-plans", {
-      method: "POST",
+    await api(planId ? `/api/maintenance-plans/${planId}` : "/api/maintenance-plans", {
+      method: planId ? "PATCH" : "POST",
       body: JSON.stringify({
-        title: data.title,
         targetType: target.targetType,
         targetId: target.targetId,
         employeeId: data.employeeId ? Number(data.employeeId) : null,
         intervalDays: Number(data.intervalDays),
-        nextDueOn: data.nextDueOn
+        nextDueOn: data.nextDueOn,
+        instructionsHtml: data.instructionsHtml
       })
     });
 
-    els.maintenanceForm.reset();
-    syncSearchableSelect(els.maintenanceTargetSelect);
-    syncSearchableSelect(els.maintenanceEmployeeSelect);
-    showToast("Wartungsplan gespeichert.");
+    resetMaintenanceForm();
+    showToast(planId ? "Wartungsplan aktualisiert." : "Wartungsplan gespeichert.");
     await loadDashboard();
   });
+
+  els.maintenanceNewButton.addEventListener("click", resetMaintenanceForm);
 
   els.assetForm.addEventListener("submit", async (event) => {
     event.preventDefault();

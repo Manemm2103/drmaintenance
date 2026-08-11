@@ -686,6 +686,35 @@ textarea:focus {
   font-size: 0.82rem;
 }
 
+.maintenance-html-preview {
+  max-height: 220px;
+  margin-top: 12px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #ffffff;
+  color: var(--text);
+}
+
+.maintenance-html-preview img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+.maintenance-html-preview p:first-child,
+.maintenance-html-preview ul:first-child,
+.maintenance-html-preview ol:first-child {
+  margin-top: 0;
+}
+
+.maintenance-html-preview p:last-child,
+.maintenance-html-preview ul:last-child,
+.maintenance-html-preview ol:last-child {
+  margin-bottom: 0;
+}
+
 textarea {
   resize: vertical;
 }

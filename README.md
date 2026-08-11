@@ -41,9 +41,9 @@ Ohne Login wird nur die Anmeldeseite ausgeliefert. Mit dem Haken `Angemeldet ble
 
 Der Workflow startet bei einem Kunden. Beim Anlegen vergibt DR Maintenance automatisch die nächste Kundennummer im Format `C0000154`, `C0000155` usw.; die Nummer kann in den Stammdaten geändert werden. Vorname und Name werden getrennt gepflegt, ebenso Straße, Hausnummer, PLZ und Ort. Wenn die Rechnungsadresse abweicht, können RE-Empfänger, RE-Straße, RE-Hausnummer, RE-PLZ und RE-Ort separat erfasst werden. Danach werden Gebäude und Appartments einem Kunden zugewiesen. Wartungsobjekte wie Klimaanlage oder Dampfbad hängen anschließend an einem Gebäude oder Appartment. Wartungspläne werden auf Basis dieser Wartungsobjekte angelegt.
 
-Verknüpfte Felder wie Kunde, Gebäude, Objekt-Zuordnung und Wartungsziel sind als durchsuchbare Auswahlfelder umgesetzt. Beim Tippen wird die Ergebnisliste live eingeschränkt; gespeichert wird weiterhin die eindeutige interne ID.
+Verknüpfte Felder wie Kunde, Gebäude, Objekt-Zuordnung und Wartungsobjekt sind als durchsuchbare Auswahlfelder umgesetzt. Beim Tippen wird die Ergebnisliste live eingeschränkt; gespeichert wird weiterhin die eindeutige interne ID.
 
-Die Wartungsobjektliste kann nach Freitext, Kunde, Straße/Adresse und Kritikalität gefiltert werden. Der Kalender zeigt aus einem Wartungsplan nicht nur die nächste Fälligkeit, sondern auch die folgenden rechnerischen Termine im sichtbaren Zeitraum anhand des hinterlegten Intervalls.
+Die Wartungsobjektliste kann nach Freitext, Kunde, Straße/Adresse und Kritikalität gefiltert werden. Wartungspläne werden direkt auf ein Wartungsobjekt gelegt und können einen HTML-Arbeitstext mit Bildern enthalten. Der Kalender zeigt aus einem Wartungsplan nicht nur die nächste Fälligkeit, sondern auch die folgenden rechnerischen Termine im sichtbaren Zeitraum anhand des hinterlegten Intervalls.
 
 ## Container
 
@@ -78,6 +78,7 @@ Die Wartungsobjektliste kann nach Freitext, Kunde, Straße/Adresse und Kritikali
 - `DELETE /api/apartments/:id`
 - `GET /api/maintenance-targets`
 - `POST /api/maintenance-plans`
+- `PATCH /api/maintenance-plans/:id`
 - `DELETE /api/maintenance-plans/:id`
 - `GET /api/assets`
 - `POST /api/assets`
@@ -93,7 +94,7 @@ Die Wartungsobjektliste kann nach Freitext, Kunde, Straße/Adresse und Kritikali
 
 ## Versionierung
 
-Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.10.10`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
+Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.10.12`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
 
 ## Nächste sinnvolle Schritte
 

@@ -497,15 +497,12 @@
               </div>
             </div>
             <form id="maintenanceForm" class="form-grid">
-              <label>
-                Titel
-                <input name="title" placeholder="z.B. Rauchmelder prüfen" required>
-              </label>
+              <input name="maintenancePlanId" id="maintenancePlanIdInput" type="hidden">
               <div class="target-field span-2">
                 <label>
-                  Wartungsziel
+                  Wartungsobjekt
                   <select name="target" id="maintenanceTargetSelect" required>
-                    <option value="">Wartungsziel auswählen</option>
+                    <option value="">Wartungsobjekt auswählen</option>
                   </select>
                 </label>
                 <button class="ghost-button" type="button" data-view-target="wartungsobjekte" data-scroll-target="assetForm">Objekt anlegen</button>
@@ -524,7 +521,14 @@
                 Fällig am
                 <input name="nextDueOn" id="maintenanceDueDate" type="date" required>
               </label>
-              <button class="primary-button span-2" type="submit">Wartungsplan speichern</button>
+              <label class="span-2">
+                Was ist zu machen? (HTML)
+                <textarea name="instructionsHtml" rows="7" placeholder="<p>Arbeitsschritte...</p><img src=&quot;https://...&quot; alt=&quot;Bild&quot;>"></textarea>
+              </label>
+              <div class="form-actions span-2">
+                <button class="primary-button" id="maintenanceSubmitButton" type="submit">Wartungsplan speichern</button>
+                <button class="ghost-button" id="maintenanceNewButton" type="button">Neu</button>
+              </div>
             </form>
           </article>
 

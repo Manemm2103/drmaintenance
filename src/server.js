@@ -308,9 +308,14 @@ app.get("/api/maintenance-targets", asyncRoute(async (_req, res) => {
 }));
 
 app.post("/api/maintenance-plans", asyncRoute(async (req, res) => {
-  requireFields(req.body, ["title", "targetType", "targetId", "intervalDays", "nextDueOn"]);
+  requireFields(req.body, ["targetType", "targetId", "intervalDays", "nextDueOn"]);
   const maintenancePlan = await db.createMaintenancePlan(req.body);
   res.status(201).json(maintenancePlan);
+}));
+
+app.patch("/api/maintenance-plans/:id", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["targetType", "targetId", "intervalDays", "nextDueOn"]);
+  res.json(await db.updateMaintenancePlan(Number(req.params.id), req.body));
 }));
 
 app.delete("/api/maintenance-plans/:id", asyncRoute(async (req, res) => {

@@ -206,6 +206,7 @@ async function runMigrations() {
       target_id INT NULL,
       employee_id INT NULL,
       title VARCHAR(180) NOT NULL,
+      instructions_html MEDIUMTEXT NULL,
       interval_days INT NOT NULL,
       last_done_on DATE NULL,
       next_due_on DATE NOT NULL,
@@ -224,6 +225,7 @@ async function runMigrations() {
   await pool.query("ALTER TABLE maintenance_plans ADD COLUMN IF NOT EXISTS target_type ENUM('asset', 'building', 'apartment') NULL AFTER asset_id");
   await pool.query("ALTER TABLE maintenance_plans ADD COLUMN IF NOT EXISTS target_id INT NULL AFTER target_type");
   await pool.query("ALTER TABLE maintenance_plans ADD COLUMN IF NOT EXISTS employee_id INT NULL AFTER target_id");
+  await pool.query("ALTER TABLE maintenance_plans ADD COLUMN IF NOT EXISTS instructions_html MEDIUMTEXT NULL AFTER title");
   await pool.query("ALTER TABLE maintenance_plans ADD INDEX IF NOT EXISTS idx_plans_target (target_type, target_id)");
   await pool.query("ALTER TABLE maintenance_plans ADD INDEX IF NOT EXISTS idx_plans_employee (employee_id)");
   await pool.query("UPDATE maintenance_plans SET target_type = 'asset', target_id = asset_id WHERE target_type IS NULL AND asset_id IS NOT NULL");
@@ -584,6 +586,7 @@ async function normalizeGermanText() {
     ["employees", "role_title"],
     ["employees", "notes"],
     ["maintenance_plans", "title"],
+    ["maintenance_plans", "instructions_html"],
     ["work_orders", "title"],
     ["work_orders", "description"],
     ["activity_log", "message"],
@@ -640,6 +643,7 @@ async function getDashboardSummary() {
       mp.id,
       mp.asset_id AS assetId,
       mp.title,
+      mp.instructions_html AS instructionsHtml,
       mp.interval_days AS intervalDays,
       DATE_FORMAT(mp.next_due_on, '%Y-%m-%d') AS nextDueOn,
       mp.target_type AS targetType,
@@ -2116,7 +2120,7 @@ async function listMaintenanceTargets() {
 
 async function assertMaintenanceTarget(targetType, targetId) {
   if (!["asset", "building", "apartment"].includes(targetType)) {
-    throw createError("Ungültiges Wartungsziel.", 400);
+    throw createError("Ungültiges Wartungsobjekt.", 400);
   }
 
   if (targetType === "asset") {
@@ -2151,20 +2155,47 @@ async function assertMaintenanceTarget(targetType, targetId) {
   }
 
   if (building.apartmentCount > 0) {
-    throw createError("Gebäude mit Appartments können nicht direkt als Wartungsziel genutzt werden.", 400);
+    throw createError("Gebäude mit Appartments können nicht direkt als Wartungsobjekt genutzt werden.", 400);
   }
 }
 
-async function createMaintenancePlan(input) {
-  const title = input.title?.trim();
+async function getMaintenanceTargetDisplayName(targetType, targetId) {
+  if (targetType === "asset") {
+    const [[asset]] = await pool.execute("SELECT name FROM assets WHERE id = ?", [targetId]);
+    return asset?.name || null;
+  }
+
+  if (targetType === "apartment") {
+    const [[apartment]] = await pool.execute(
+      `
+        SELECT CONCAT(b.name, ' / ', a.name) AS name
+        FROM apartments a
+        INNER JOIN buildings b ON b.id = a.building_id
+        WHERE a.id = ?
+      `,
+      [targetId]
+    );
+    return apartment?.name || null;
+  }
+
+  if (targetType === "building") {
+    const [[building]] = await pool.execute("SELECT name FROM buildings WHERE id = ?", [targetId]);
+    return building?.name || null;
+  }
+
+  return null;
+}
+
+async function prepareMaintenancePlanWrite(input) {
   const targetType = input.targetType;
   const targetId = Number(input.targetId);
   const parsedEmployeeId = Number(input.employeeId);
   const employeeId = Number.isFinite(parsedEmployeeId) && parsedEmployeeId > 0 ? parsedEmployeeId : null;
   const intervalDays = Number(input.intervalDays);
+  const instructionsHtml = normalizeText(input.instructionsHtml) || null;
 
-  if (!title || !targetType || !targetId || !intervalDays || !input.nextDueOn) {
-    throw createError("Titel, Objekt, Intervall und Fälligkeit sind Pflichtfelder.", 400);
+  if (!targetType || !targetId || !intervalDays || !input.nextDueOn) {
+    throw createError("Wartungsobjekt, Intervall und Fälligkeit sind Pflichtfelder.", 400);
   }
 
   if (intervalDays < 1) {
@@ -2181,29 +2212,88 @@ async function createMaintenancePlan(input) {
   }
   const nextDueOn = adjustDateKeyForWeekend(input.nextDueOn, settings, customerWeekdays);
   const assetId = targetType === "asset" ? targetId : null;
+  const title = normalizeText(input.title) || await getMaintenanceTargetDisplayName(targetType, targetId) || "Wartungsplan";
+
+  return {
+    assetId,
+    targetType,
+    targetId,
+    employeeId,
+    title,
+    instructionsHtml,
+    intervalDays,
+    nextDueOn
+  };
+}
+
+async function createMaintenancePlan(input) {
+  const plan = await prepareMaintenancePlanWrite(input);
   const [result] = await pool.execute(
     `
-      INSERT INTO maintenance_plans (asset_id, target_type, target_id, employee_id, title, interval_days, last_done_on, next_due_on)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO maintenance_plans (asset_id, target_type, target_id, employee_id, title, instructions_html, interval_days, last_done_on, next_due_on)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
-      assetId,
-      targetType,
-      targetId,
-      employeeId,
-      title,
-      intervalDays,
+      plan.assetId,
+      plan.targetType,
+      plan.targetId,
+      plan.employeeId,
+      plan.title,
+      plan.instructionsHtml,
+      plan.intervalDays,
       input.lastDoneOn || null,
-      nextDueOn
+      plan.nextDueOn
     ]
   );
 
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('maintenance_plan', ?, ?)",
-    [result.insertId, `Wartungsplan "${title}" angelegt.`]
+    [result.insertId, `Wartungsplan "${plan.title}" angelegt.`]
   );
 
   return getMaintenancePlanById(result.insertId);
+}
+
+async function updateMaintenancePlan(id, input) {
+  const existingPlan = await getMaintenancePlanById(id);
+  if (!existingPlan) {
+    throw createError("Wartungsplan nicht gefunden.", 404);
+  }
+
+  const plan = await prepareMaintenancePlanWrite(input);
+  await pool.execute(
+    `
+      UPDATE maintenance_plans
+      SET
+        asset_id = ?,
+        target_type = ?,
+        target_id = ?,
+        employee_id = ?,
+        title = ?,
+        instructions_html = ?,
+        interval_days = ?,
+        next_due_on = ?
+      WHERE id = ?
+    `,
+    [
+      plan.assetId,
+      plan.targetType,
+      plan.targetId,
+      plan.employeeId,
+      plan.title,
+      plan.instructionsHtml,
+      plan.intervalDays,
+      plan.nextDueOn,
+      id
+    ]
+  );
+
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('maintenance_plan', ?, ?)",
+    [id, `Wartungsplan "${plan.title}" aktualisiert.`]
+  );
+
+  return getMaintenancePlanById(id);
 }
 
 async function deleteMaintenancePlan(id) {
@@ -2227,6 +2317,7 @@ async function getMaintenancePlanById(id) {
       SELECT
         mp.id,
         mp.title,
+        mp.instructions_html AS instructionsHtml,
         mp.interval_days AS intervalDays,
         DATE_FORMAT(mp.next_due_on, '%Y-%m-%d') AS nextDueOn,
         mp.target_type AS targetType,
@@ -2369,6 +2460,28 @@ function adjustDateKeyForWeekend(value, settings, customerWeekdays = null) {
   return formatDateKey(adjustDateForWeekend(parseDateKey(value), settings, customerWeekdays));
 }
 
+function hasMaintenanceNeighbor(dateKey, occupiedDateKeys) {
+  const date = parseDateKey(dateKey);
+  return [-1, 0, 1].some((offset) => occupiedDateKeys.has(formatDateKey(addDays(date, offset))));
+}
+
+function findNextSpacedMaintenanceDate(date, settings, customerWeekdays, occupiedDateKeys) {
+  let adjustedDate = adjustDateForWeekend(date, settings, customerWeekdays);
+  let attempts = 0;
+
+  while (attempts < 730) {
+    const adjustedDateKey = formatDateKey(adjustedDate);
+    if (!isSkippedMaintenanceWeekday(adjustedDate, settings, customerWeekdays) && !hasMaintenanceNeighbor(adjustedDateKey, occupiedDateKeys)) {
+      return adjustedDate;
+    }
+
+    adjustedDate = adjustDateForWeekend(addDays(adjustedDate, 1), settings, customerWeekdays);
+    attempts += 1;
+  }
+
+  return adjustedDate;
+}
+
 function daysBetween(start, end) {
   return Math.floor((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000));
 }
@@ -2412,8 +2525,8 @@ async function getCalendarEvents(startDate, endDate) {
 
   const rangeStart = parseDateKey(startDate);
   const rangeEnd = parseDateKey(endDate);
-  const rawRangeStart = addDays(rangeStart, -6);
-  const events = [];
+  const rawRangeStart = addDays(rangeStart, -31);
+  const candidates = [];
 
   for (const row of rows) {
     const customerWeekdays = await getCustomerMaintenanceWeekdaysForTarget(
@@ -2422,32 +2535,29 @@ async function getCalendarEvents(startDate, endDate) {
     );
     const intervalDays = Number(row.intervalDays);
     let dueDate = parseDateKey(row.dueDate);
+    let occurrenceIndex = 0;
 
     if (intervalDays > 0 && dueDate < rawRangeStart) {
       const missedIntervals = Math.floor(daysBetween(dueDate, rawRangeStart) / intervalDays);
       dueDate = addDays(dueDate, missedIntervals * intervalDays);
+      occurrenceIndex = missedIntervals;
       while (dueDate < rawRangeStart) {
         dueDate = addDays(dueDate, intervalDays);
+        occurrenceIndex += 1;
       }
     }
 
-    let occurrenceIndex = 0;
     while (dueDate <= rangeEnd) {
       const rawDueDateKey = formatDateKey(dueDate);
-      const visibleDueDate = adjustDateForWeekend(dueDate, settings, customerWeekdays);
-      const visibleDueDateKey = formatDateKey(visibleDueDate);
-      if (visibleDueDate >= rangeStart && visibleDueDate <= rangeEnd) {
-        events.push({
-          ...row,
-          id: `${row.id}:${visibleDueDateKey}:${occurrenceIndex}`,
-          planId: row.id,
-          rawDueDate: rawDueDateKey,
-          dueDate: visibleDueDateKey,
-          generated: rawDueDateKey !== row.dueDate || visibleDueDateKey !== rawDueDateKey,
-          weekendAdjusted: visibleDueDateKey !== rawDueDateKey,
-          occurrenceIndex
-        });
-      }
+      const firstAllowedDueDate = adjustDateForWeekend(dueDate, settings, customerWeekdays);
+      candidates.push({
+        ...row,
+        customerWeekdays,
+        firstAllowedDueDate,
+        firstAllowedDueDateKey: formatDateKey(firstAllowedDueDate),
+        occurrenceIndex,
+        rawDueDateKey
+      });
 
       if (!intervalDays || intervalDays < 1) {
         break;
@@ -2459,6 +2569,48 @@ async function getCalendarEvents(startDate, endDate) {
       if (occurrenceIndex > 370) {
         break;
       }
+    }
+  }
+
+  candidates.sort((left, right) => (
+    left.firstAllowedDueDateKey.localeCompare(right.firstAllowedDueDateKey)
+    || left.rawDueDateKey.localeCompare(right.rawDueDateKey)
+    || left.title.localeCompare(right.title, "de")
+    || Number(left.id) - Number(right.id)
+  ));
+
+  const occupiedDateKeys = new Set();
+  const events = [];
+  for (const candidate of candidates) {
+    const visibleDueDate = findNextSpacedMaintenanceDate(
+      candidate.firstAllowedDueDate,
+      settings,
+      candidate.customerWeekdays,
+      occupiedDateKeys
+    );
+    const visibleDueDateKey = formatDateKey(visibleDueDate);
+    occupiedDateKeys.add(visibleDueDateKey);
+
+    if (visibleDueDate >= rangeStart && visibleDueDate <= rangeEnd) {
+      const {
+        customerWeekdays: _customerWeekdays,
+        firstAllowedDueDate: _firstAllowedDueDate,
+        firstAllowedDueDateKey,
+        rawDueDateKey,
+        ...eventPayload
+      } = candidate;
+
+      events.push({
+        ...eventPayload,
+        id: `${eventPayload.id}:${visibleDueDateKey}:${eventPayload.occurrenceIndex}`,
+        planId: eventPayload.id,
+        rawDueDate: rawDueDateKey,
+        dueDate: visibleDueDateKey,
+        generated: rawDueDateKey !== eventPayload.dueDate || visibleDueDateKey !== rawDueDateKey,
+        weekendAdjusted: firstAllowedDueDateKey !== rawDueDateKey,
+        spacingAdjusted: visibleDueDateKey !== firstAllowedDueDateKey,
+        occurrenceIndex: eventPayload.occurrenceIndex
+      });
     }
   }
 
@@ -2853,6 +3005,7 @@ module.exports = {
   deleteApartment,
   listMaintenanceTargets,
   createMaintenancePlan,
+  updateMaintenancePlan,
   deleteMaintenancePlan,
   getCalendarEvents,
   listAssets,
