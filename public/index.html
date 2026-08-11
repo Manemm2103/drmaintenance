@@ -28,7 +28,6 @@
           <a href="#wartungsobjekte" data-view-link="wartungsobjekte">Objekte</a>
           <a href="#planung" data-view-link="planung">Wartungspläne</a>
           <a href="#mitarbeiter" data-view-link="mitarbeiter">Mitarbeiter</a>
-          <a href="#benutzer" data-view-link="benutzer">Benutzer</a>
           <a href="#stammdaten" data-view-link="stammdaten">Stammdaten</a>
         </nav>
 
@@ -147,6 +146,55 @@
               </div>
             </form>
             <div class="user-list" id="employeeFunctionList"></div>
+            <div class="section-divider">
+              <p class="eyebrow">Administration</p>
+              <h3>Benutzer</h3>
+            </div>
+            <div class="users-layout">
+              <form id="userForm" class="form-grid">
+                <label>
+                  Benutzername
+                  <input name="username" placeholder="z.B. max" autocomplete="username" required>
+                </label>
+                <label>
+                  Anzeigename
+                  <input name="displayName" placeholder="Max Mustermann" required>
+                </label>
+                <label>
+                  E-Mail
+                  <input name="email" type="email" placeholder="max@example.com">
+                </label>
+                <label>
+                  Rolle
+                  <select name="role" id="userRoleSelect" required>
+                    <option value="customer">Kunde</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </label>
+                <label class="span-2">
+                  Initiales Passwort
+                  <input name="password" type="password" autocomplete="new-password" required>
+                </label>
+                <button class="primary-button span-2" type="submit">Benutzer anlegen</button>
+              </form>
+              <div class="user-list" id="userList"></div>
+              <div class="section-divider">
+                <p class="eyebrow">Login</p>
+                <h3>Rollen</h3>
+              </div>
+              <form id="userRoleForm" class="form-grid compact-form">
+                <input type="hidden" name="roleKey" id="userRoleKeyInput">
+                <label>
+                  Rollenname
+                  <input name="name" placeholder="z.B. Objektverwalter" required>
+                </label>
+                <div class="form-actions">
+                  <button class="primary-button" type="submit" id="userRoleSubmitButton">Rolle speichern</button>
+                  <button class="ghost-button" type="button" id="userRoleNewButton">Neu</button>
+                </div>
+              </form>
+              <div class="user-list" id="userRoleList"></div>
+            </div>
           </article>
           </section>
         </section>
@@ -789,64 +837,6 @@
                 <button class="ghost-button" id="employeeNewButton" type="button">Neu</button>
               </form>
               <div class="user-list" id="employeeList"></div>
-            </div>
-          </article>
-          </section>
-        </section>
-
-        <section class="view" data-view="benutzer">
-          <section class="workspace-grid single-view-grid">
-          <article class="panel wide" id="benutzer">
-            <div class="panel-header">
-              <div>
-                <p class="eyebrow">Administration</p>
-                <h2>Benutzer</h2>
-              </div>
-            </div>
-            <div class="users-layout">
-              <form id="userForm" class="form-grid">
-                <label>
-                  Benutzername
-                  <input name="username" placeholder="z.B. max" autocomplete="username" required>
-                </label>
-                <label>
-                  Anzeigename
-                  <input name="displayName" placeholder="Max Mustermann" required>
-                </label>
-                <label>
-                  E-Mail
-                  <input name="email" type="email" placeholder="max@example.com">
-                </label>
-                <label>
-                  Rolle
-                  <select name="role" id="userRoleSelect" required>
-                    <option value="customer">Kunde</option>
-                    <option value="admin">Admin</option>
-                  </select>
-                </label>
-                <label class="span-2">
-                  Initiales Passwort
-                  <input name="password" type="password" autocomplete="new-password" required>
-                </label>
-                <button class="primary-button span-2" type="submit">Benutzer anlegen</button>
-              </form>
-              <div class="user-list" id="userList"></div>
-              <div class="section-divider">
-                <p class="eyebrow">Login</p>
-                <h3>Rollen</h3>
-              </div>
-              <form id="userRoleForm" class="form-grid compact-form">
-                <input type="hidden" name="roleKey" id="userRoleKeyInput">
-                <label>
-                  Rollenname
-                  <input name="name" placeholder="z.B. Objektverwalter" required>
-                </label>
-                <div class="form-actions">
-                  <button class="primary-button" type="submit" id="userRoleSubmitButton">Rolle speichern</button>
-                  <button class="ghost-button" type="button" id="userRoleNewButton">Neu</button>
-                </div>
-              </form>
-              <div class="user-list" id="userRoleList"></div>
             </div>
           </article>
           </section>

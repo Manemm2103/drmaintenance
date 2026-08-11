@@ -47,7 +47,7 @@ Kunden, Gebäude, Wohnungen/Appartments und Wartungsobjekte werden jeweils unter
 
 Aufträge haben eine eigene Seite. Standardmäßig werden offene Aufträge angezeigt; über den Filter können überfällige, erledigte oder alle Aufträge geladen werden. Ein Klick auf einen Auftrag öffnet die Bearbeitung, damit Status, Fälligkeit, Beschreibung und die enthaltenen Checks abgearbeitet werden können. Die alte Schnell-Erfassung im Dashboard wurde entfernt.
 
-Mitarbeiternummern werden automatisch fortlaufend im Format `M0001`, `M0002` usw. vergeben und können bei Bedarf geändert werden. Mitarbeiterfunktionen werden in den Stammdaten gepflegt und anschließend Mitarbeitern zugewiesen. Benutzerrollen werden im Benutzerbereich gepflegt; die Systemrollen `admin` und `customer`/`Kunde` werden initial angelegt und können nicht gelöscht werden.
+Mitarbeiternummern werden automatisch fortlaufend im Format `M0001`, `M0002` usw. vergeben und können bei Bedarf geändert werden. Mitarbeiterfunktionen werden in den Stammdaten gepflegt und anschließend Mitarbeitern zugewiesen. Benutzer und Benutzerrollen werden ebenfalls in den Stammdaten gepflegt; die Systemrollen `admin` und `customer`/`Kunde` werden initial angelegt und können nicht gelöscht werden.
 
 ## Container
 

@@ -121,6 +121,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 36px;
+  overflow-y: auto;
   padding: 28px;
   background: rgba(255, 255, 255, 0.88);
   border-right: 1px solid var(--line);

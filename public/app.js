@@ -447,14 +447,6 @@ const viewConfig = {
     actionTitle: "Neuen Mitarbeiter anlegen",
     actionView: "mitarbeiter",
     scrollTarget: "employeeForm"
-  },
-  benutzer: {
-    eyebrow: "Administration",
-    title: "Benutzer verwalten.",
-    actionLabel: "Benutzer",
-    actionTitle: "Neuen Benutzer anlegen",
-    actionView: "benutzer",
-    scrollTarget: "userForm"
   }
 };
 
@@ -471,7 +463,7 @@ const hashViewMap = {
   planung: "planung",
   "new-maintenance": "planung",
   mitarbeiter: "mitarbeiter",
-  benutzer: "benutzer"
+  benutzer: "stammdaten"
 };
 
 let visibleMonth = startOfMonth(new Date());
@@ -1986,7 +1978,7 @@ function loadUserRoleIntoForm(role) {
   els.userRoleForm.elements.roleKey.value = role.roleKey || "";
   els.userRoleForm.elements.name.value = role.name || "";
   els.userRoleSubmitButton.textContent = "Änderungen speichern";
-  setView("benutzer", { updateHash: true, scrollTop: false });
+  setView("stammdaten", { updateHash: true, scrollTop: false });
   window.setTimeout(() => scrollToTarget("userRoleForm"), 0);
 }
 
