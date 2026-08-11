@@ -937,6 +937,10 @@ textarea {
   margin: 2px 0 18px;
 }
 
+.asset-save-actions {
+  margin: 0 0 18px;
+}
+
 .asset-detail-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }

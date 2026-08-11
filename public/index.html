@@ -614,10 +614,6 @@
                 Objekt-Arbeitstext (HTML)
                 <textarea name="instructionsHtml" rows="6" placeholder="<p>Was ist an diesem Objekt zu tun?</p><img src=&quot;https://...&quot; alt=&quot;Bild&quot;>"></textarea>
               </label>
-              <div class="form-actions span-2">
-                <button class="primary-button" type="submit" id="assetSubmitButton">Objekt speichern</button>
-                <button class="ghost-button" type="button" id="assetNewButton">Neu</button>
-              </div>
             </form>
             <div class="asset-detail-panel" id="assetDetailPanel" hidden>
               <div class="section-divider">
@@ -646,6 +642,10 @@
                   <div class="plan-list" id="assetOpenOrderList"></div>
                 </div>
               </div>
+            </div>
+            <div class="form-actions asset-save-actions">
+              <button class="primary-button" type="submit" form="assetForm" id="assetSubmitButton">Objekt speichern</button>
+              <button class="ghost-button" type="button" id="assetNewButton">Neu</button>
             </div>
             <div class="asset-filter-bar" aria-label="Wartungsobjekte filtern">
               <label>
