@@ -31,6 +31,11 @@ const els = {
   assetFilterResetButton: document.querySelector("#assetFilterResetButton"),
   assetResultCount: document.querySelector("#assetResultCount"),
   planList: document.querySelector("#planList"),
+  planSearchInput: document.querySelector("#planSearchInput"),
+  planEmployeeFilter: document.querySelector("#planEmployeeFilter"),
+  planDueFilter: document.querySelector("#planDueFilter"),
+  planFilterResetButton: document.querySelector("#planFilterResetButton"),
+  planResultCount: document.querySelector("#planResultCount"),
   activityList: document.querySelector("#activityList"),
   customerList: document.querySelector("#customerList"),
   customerSearchInput: document.querySelector("#customerSearchInput"),
@@ -937,6 +942,7 @@ function renderSummary(payload) {
 
   renderAssetCustomerFilterOptions(customers);
   renderAssets(assets);
+  renderPlanEmployeeFilterOptions(employees);
   renderPlans(plans);
   renderActivity(activity);
   renderCustomers(customers);
@@ -1190,13 +1196,72 @@ function renderAssetDetails(details) {
   renderAssetOpenOrders(details.workOrders || []);
 }
 
-function renderPlans(plans) {
+function addDaysToDateKey(dateKey, days) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return toDateKey(date);
+}
+
+function getPlanSearchText(plan) {
+  return [
+    plan.targetName,
+    plan.title,
+    plan.targetSubtitle,
+    plan.employeeName,
+    plan.intervalDays,
+    plan.nextDueOn,
+    plan.rawNextDueOn,
+    plan.instructionsHtml
+  ].filter(Boolean).join(" ");
+}
+
+function getFilteredPlans(plans) {
+  const search = normalizeSearchValue(els.planSearchInput.value);
+  const employeeFilter = els.planEmployeeFilter.value;
+  const dueFilter = els.planDueFilter.value;
+  const todayKey = toDateKey(new Date());
+  const next30Key = addDaysToDateKey(todayKey, 30);
+  const next90Key = addDaysToDateKey(todayKey, 90);
+
+  return (plans || []).filter((plan) => {
+    const dueDate = plan.nextDueOn || plan.rawNextDueOn || "";
+    const matchesDueFilter = !dueFilter
+      || (dueFilter === "overdue" && dueDate && dueDate < todayKey)
+      || (dueFilter === "next30" && dueDate && dueDate >= todayKey && dueDate <= next30Key)
+      || (dueFilter === "next90" && dueDate && dueDate >= todayKey && dueDate <= next90Key);
+
+    return (!search || normalizeSearchValue(getPlanSearchText(plan)).includes(search))
+      && (!employeeFilter
+        || (employeeFilter === "__none" ? !plan.employeeId : String(plan.employeeId || "") === employeeFilter))
+      && matchesDueFilter;
+  });
+}
+
+function renderPlanEmployeeFilterOptions(employees) {
+  const currentValue = els.planEmployeeFilter.value;
+  els.planEmployeeFilter.innerHTML = '<option value="">Alle Mitarbeiter</option><option value="__none">Ohne Mitarbeiter</option>' + (employees || []).map((employee) => {
+    const number = employee.employeeNumber ? `${employee.employeeNumber} - ` : "";
+    return `<option value="${employee.id}">${escapeHtml(`${number}${employee.name}`)}</option>`;
+  }).join("");
+  els.planEmployeeFilter.value = currentValue;
+}
+
+function renderPlans(plans = latestPlans) {
   if (!plans || plans.length === 0) {
     els.planList.innerHTML = '<div class="list-item">Keine Wartungspläne.</div>';
+    els.planResultCount.textContent = "0 Wartungspläne";
     return;
   }
 
-  els.planList.innerHTML = plans.map((plan) => `
+  const filteredPlans = getFilteredPlans(plans);
+  els.planResultCount.textContent = `${filteredPlans.length} von ${plans.length} Wartungsplänen`;
+
+  if (filteredPlans.length === 0) {
+    els.planList.innerHTML = '<div class="list-item">Keine Wartungspläne für diesen Filter.</div>';
+    return;
+  }
+
+  els.planList.innerHTML = filteredPlans.map((plan) => `
     <div class="list-item list-item-with-actions clickable-list-item" role="button" tabindex="0" data-edit-plan="${plan.id}" title="Wartungsplan bearbeiten">
       <div>
         <strong>${escapeHtml(plan.targetName || plan.title || "Wartungsobjekt")}</strong>
@@ -2406,6 +2471,16 @@ function bindEvents() {
     els.assetCustomerFilter.value = "";
     els.assetCriticalityFilter.value = "";
     renderAssets(latestAssets);
+  });
+
+  els.planSearchInput.addEventListener("input", () => renderPlans(latestPlans));
+  els.planEmployeeFilter.addEventListener("change", () => renderPlans(latestPlans));
+  els.planDueFilter.addEventListener("change", () => renderPlans(latestPlans));
+  els.planFilterResetButton.addEventListener("click", () => {
+    els.planSearchInput.value = "";
+    els.planEmployeeFilter.value = "";
+    els.planDueFilter.value = "";
+    renderPlans(latestPlans);
   });
 
   els.customerSearchInput.addEventListener("input", () => renderCustomers(latestCustomers));

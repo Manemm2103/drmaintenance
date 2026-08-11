@@ -731,7 +731,7 @@
         </section>
 
         <section class="view" data-view="planung">
-          <section class="workspace-grid">
+          <section class="workspace-grid single-view-grid">
           <article class="panel wide" id="new-maintenance">
             <div class="panel-header">
               <div>
@@ -773,13 +773,35 @@
                 <button class="ghost-button" id="maintenanceNewButton" type="button">Neu</button>
               </div>
             </form>
-          </article>
-
-          <article class="panel" id="planung">
-            <div class="panel-header">
+            <div class="section-divider" id="planung">
               <div>
                 <p class="eyebrow">Planung</p>
                 <h2>Wartungspläne</h2>
+              </div>
+            </div>
+            <div class="asset-filter-bar" aria-label="Wartungspläne filtern">
+              <label>
+                Suche
+                <input id="planSearchInput" placeholder="Objekt, Gebäude, Kunde, Arbeitstext">
+              </label>
+              <label>
+                Mitarbeiter
+                <select id="planEmployeeFilter">
+                  <option value="">Alle Mitarbeiter</option>
+                </select>
+              </label>
+              <label>
+                Fälligkeit
+                <select id="planDueFilter">
+                  <option value="">Alle Fälligkeiten</option>
+                  <option value="overdue">Überfällig</option>
+                  <option value="next30">Nächste 30 Tage</option>
+                  <option value="next90">Nächste 90 Tage</option>
+                </select>
+              </label>
+              <div class="filter-actions">
+                <span id="planResultCount" class="muted">0 Wartungspläne</span>
+                <button class="ghost-button" type="button" id="planFilterResetButton">Filter zurücksetzen</button>
               </div>
             </div>
             <div class="plan-list" id="planList"></div>
