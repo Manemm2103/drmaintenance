@@ -1132,8 +1132,6 @@ function renderAssets(assets = latestAssets) {
         <strong>${escapeHtml(asset.name)}</strong>
         <div class="list-meta">
           <span>${escapeHtml(formatCustomerLabel(asset.customerNumber, asset.customerName))}</span>
-          <span>${escapeHtml(asset.assignmentLabel || "Keine Zuordnung")}</span>
-          <span>${escapeHtml(asset.buildingAddress || getAssetAddressLabel(asset) || "Keine Adresse")}</span>
           <span>${escapeHtml(asset.assetType)}</span>
           <span>${escapeHtml(asset.location)}</span>
           <span>${priorityLabels[asset.criticality] || asset.criticality}</span>
