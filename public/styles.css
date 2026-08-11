@@ -960,8 +960,7 @@ textarea {
 }
 
 .work-order-list,
-.check-list,
-.asset-detail-grid {
+.check-list {
   display: grid;
   gap: 10px;
 }
@@ -1007,10 +1006,6 @@ textarea {
   height: 18px;
 }
 
-.asset-detail-panel {
-  margin: 2px 0 18px;
-}
-
 .asset-check-builder {
   display: grid;
   gap: 10px;
@@ -1035,15 +1030,6 @@ textarea {
 
 .asset-save-actions {
   margin: 0 0 18px;
-}
-
-.asset-detail-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.asset-detail-grid h3 {
-  margin: 0 0 10px;
-  font-size: 0.95rem;
 }
 
 .toast {
@@ -1123,7 +1109,6 @@ textarea {
   .billing-fields,
   .weekday-fields,
   .asset-filter-bar,
-  .asset-detail-grid,
   .inline-check-form,
   .users-layout,
   .property-forms {

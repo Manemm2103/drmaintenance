@@ -85,15 +85,9 @@ const els = {
   assetInstructionsEditor: document.querySelector("#assetInstructionsEditor"),
   assetSubmitButton: document.querySelector("#assetSubmitButton"),
   assetNewButton: document.querySelector("#assetNewButton"),
-  assetDetailPanel: document.querySelector("#assetDetailPanel"),
-  assetCheckForm: document.querySelector("#assetCheckForm"),
-  assetCheckAssetIdInput: document.querySelector("#assetCheckAssetIdInput"),
-  assetCheckList: document.querySelector("#assetCheckList"),
   assetDraftCheckInput: document.querySelector("#assetDraftCheckInput"),
   assetDraftCheckAddButton: document.querySelector("#assetDraftCheckAddButton"),
   assetDraftCheckList: document.querySelector("#assetDraftCheckList"),
-  assetMaintenancePlanList: document.querySelector("#assetMaintenancePlanList"),
-  assetOpenOrderList: document.querySelector("#assetOpenOrderList"),
   buildingForm: document.querySelector("#buildingForm"),
   buildingIdInput: document.querySelector("#buildingIdInput"),
   buildingSubmitButton: document.querySelector("#buildingSubmitButton"),
@@ -1148,20 +1142,6 @@ function renderAssets(assets = latestAssets) {
   `).join("");
 }
 
-function renderAssetChecks(checks = []) {
-  if (!checks.length) {
-    els.assetCheckList.innerHTML = '<div class="list-item">Noch keine Checks für dieses Objekt.</div>';
-    return;
-  }
-
-  els.assetCheckList.innerHTML = checks.map((check) => `
-    <div class="list-item list-item-with-actions">
-      <strong>${escapeHtml(check.label)}</strong>
-      <button class="compact-button" type="button" title="Check löschen" aria-label="Check löschen" data-delete-asset-check="${check.id}">X</button>
-    </div>
-  `).join("");
-}
-
 function renderDraftAssetChecks() {
   if (draftAssetCheckLabels.length === 0) {
     els.assetDraftCheckList.innerHTML = '<div class="list-item">Noch keine neuen Checkpunkte vorbereitet.</div>';
@@ -1202,56 +1182,6 @@ function resetDraftAssetChecks() {
   draftAssetCheckLabels = [];
   els.assetDraftCheckInput.value = "";
   renderDraftAssetChecks();
-}
-
-function renderAssetMaintenancePlans(plans = []) {
-  if (!plans.length) {
-    els.assetMaintenancePlanList.innerHTML = '<div class="list-item">Keine Wartungspläne für dieses Objekt.</div>';
-    return;
-  }
-
-  els.assetMaintenancePlanList.innerHTML = plans.map((plan) => `
-    <div class="list-item clickable-list-item" role="button" tabindex="0" data-edit-plan="${plan.id}" title="Wartungsplan bearbeiten">
-      <strong>${escapeHtml(plan.title || "Wartungsplan")}</strong>
-      <div class="list-meta">
-        <span>${formatDate(plan.nextDueOn)}</span>
-        <span>${plan.intervalDays} Tage</span>
-        <span>${escapeHtml(plan.employeeName || "Kein Mitarbeiter")}</span>
-        <span>${Number(plan.active) === 1 || plan.active === true ? "Aktiv" : "Inaktiv"}</span>
-      </div>
-    </div>
-  `).join("");
-}
-
-function renderAssetOpenOrders(workOrders = []) {
-  if (!workOrders.length) {
-    els.assetOpenOrderList.innerHTML = '<div class="list-item">Keine offenen Aufträge für dieses Objekt.</div>';
-    return;
-  }
-
-  els.assetOpenOrderList.innerHTML = workOrders.map((order) => {
-    const checkCount = Number(order.checkCount || 0);
-    const checkedCount = Number(order.checkedCount || 0);
-    return `
-      <div class="list-item clickable-list-item" role="button" tabindex="0" data-open-work-order="${order.id}" title="Auftrag öffnen">
-        <strong>${escapeHtml(order.title)}</strong>
-        <div class="list-meta">
-          <span>${formatDate(order.dueDate)}</span>
-          <span>${statusLabels[order.status] || order.status}</span>
-          <span>${priorityLabels[order.priority] || order.priority}</span>
-          <span>${checkCount > 0 ? `${checkedCount}/${checkCount} Checks` : "Keine Checks"}</span>
-        </div>
-      </div>
-    `;
-  }).join("");
-}
-
-function renderAssetDetails(details) {
-  els.assetDetailPanel.hidden = false;
-  els.assetCheckAssetIdInput.value = details.asset.id;
-  renderAssetChecks(details.checks || []);
-  renderAssetMaintenancePlans(details.maintenancePlans || []);
-  renderAssetOpenOrders(details.workOrders || []);
 }
 
 function addDaysToDateKey(dateKey, days) {
@@ -2089,11 +2019,6 @@ function resetAssetForm() {
   resetDraftAssetChecks();
   syncSearchableSelect(els.assetPropertyTargetSelect);
   els.assetSubmitButton.textContent = "Objekt speichern";
-  els.assetDetailPanel.hidden = true;
-  els.assetCheckAssetIdInput.value = "";
-  els.assetCheckList.innerHTML = "";
-  els.assetMaintenancePlanList.innerHTML = "";
-  els.assetOpenOrderList.innerHTML = "";
 }
 
 function loadAssetIntoForm(asset) {
@@ -2112,9 +2037,6 @@ function loadAssetIntoForm(asset) {
   syncSearchableSelect(els.assetPropertyTargetSelect);
   els.assetSubmitButton.textContent = "Änderungen speichern";
   setView("wartungsobjekte", { updateHash: true, scrollTop: false });
-  if (asset.id) {
-    loadAssetDetails(asset.id).catch((error) => showToast(error.message));
-  }
   window.setTimeout(() => scrollToTarget("assetForm"), 0);
 }
 
@@ -2126,7 +2048,6 @@ function duplicateAssetInForm(asset) {
     qrCode: ""
   });
   els.assetIdInput.value = "";
-  els.assetDetailPanel.hidden = true;
   els.assetSubmitButton.textContent = "Kopie speichern";
 }
 
@@ -2515,11 +2436,6 @@ async function loadWorkOrderIntoDetail(id) {
   window.setTimeout(() => scrollToTarget("work-order-detail"), 0);
 }
 
-async function loadAssetDetails(id) {
-  const details = await api(`/api/assets/${id}/details`);
-  renderAssetDetails(details);
-}
-
 async function completeWorkOrder(id) {
   await api(`/api/work-orders/${id}/status`, {
     method: "PATCH",
@@ -2624,19 +2540,6 @@ async function deleteAsset(id) {
     method: "DELETE"
   });
   showToast("Wartungsobjekt gelöscht.");
-  await loadDashboard();
-}
-
-async function deleteAssetCheck(id) {
-  if (!window.confirm("Check wirklich löschen? Nicht erledigte Kopien in offenen Aufträgen werden entfernt.")) {
-    return;
-  }
-
-  const details = await api(`/api/asset-checks/${id}`, {
-    method: "DELETE"
-  });
-  renderAssetDetails(details);
-  showToast("Check gelöscht.");
   await loadDashboard();
 }
 
@@ -2872,13 +2775,6 @@ function bindEvents() {
     const openWorkOrder = event.target.closest("[data-open-work-order]");
     if (openWorkOrder) {
       loadWorkOrderIntoDetail(openWorkOrder.dataset.openWorkOrder).catch((error) => showToast(error.message));
-      return;
-    }
-
-    const deleteAssetCheckButton = event.target.closest("[data-delete-asset-check]");
-    if (deleteAssetCheckButton) {
-      event.stopPropagation();
-      deleteAssetCheck(deleteAssetCheckButton.dataset.deleteAssetCheck).catch((error) => showToast(error.message));
       return;
     }
 
@@ -3247,7 +3143,8 @@ function bindEvents() {
         qrCode: data.qrCode,
         criticality: data.criticality,
         instructionsHtml: data.instructionsHtml,
-        propertyTarget: data.propertyTarget
+        propertyTarget: data.propertyTarget,
+        checkLabels: data.checkLabels
       })
     });
 
@@ -3257,28 +3154,6 @@ function bindEvents() {
   });
 
   els.assetNewButton.addEventListener("click", resetAssetForm);
-
-  els.assetCheckForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const data = Object.fromEntries(new FormData(els.assetCheckForm));
-    const assetId = data.assetCheckAssetId;
-    const label = data.label?.trim();
-    if (!assetId || !label) {
-      showToast("Bitte zuerst ein Objekt wählen und einen Check eingeben.");
-      return;
-    }
-
-    const details = await api(`/api/assets/${assetId}/checks`, {
-      method: "POST",
-      body: JSON.stringify({ label })
-    });
-
-    els.assetCheckForm.reset();
-    els.assetCheckAssetIdInput.value = assetId;
-    renderAssetDetails(details);
-    showToast("Check hinzugefügt.");
-    await loadDashboard();
-  });
 
   els.customerForm.addEventListener("submit", async (event) => {
     event.preventDefault();
