@@ -271,6 +271,25 @@ app.delete("/api/employee-functions/:id", asyncRoute(async (req, res) => {
   res.json(await db.deleteEmployeeFunction(Number(req.params.id)));
 }));
 
+app.get("/api/building-types", asyncRoute(async (_req, res) => {
+  res.json(await db.listBuildingTypes());
+}));
+
+app.post("/api/building-types", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["name"]);
+  const buildingType = await db.createBuildingType(req.body);
+  res.status(201).json(buildingType);
+}));
+
+app.patch("/api/building-types/:typeKey", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["name"]);
+  res.json(await db.updateBuildingType(req.params.typeKey, req.body));
+}));
+
+app.delete("/api/building-types/:typeKey", asyncRoute(async (req, res) => {
+  res.json(await db.deleteBuildingType(req.params.typeKey));
+}));
+
 app.get("/api/customers", asyncRoute(async (_req, res) => {
   res.json(await db.listCustomers());
 }));

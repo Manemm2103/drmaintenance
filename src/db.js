@@ -169,6 +169,18 @@ async function runMigrations() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS building_types (
+      type_key VARCHAR(80) PRIMARY KEY,
+      name VARCHAR(120) NOT NULL,
+      is_system BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_building_types_name (name),
+      INDEX idx_building_types_system (is_system)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS buildings (
       id INT AUTO_INCREMENT PRIMARY KEY,
       customer_id INT NULL,
@@ -179,7 +191,7 @@ async function runMigrations() {
       city VARCHAR(120) NULL,
       country VARCHAR(80) NULL,
       address VARCHAR(220) NULL,
-      building_type ENUM('private_house', 'multi_family', 'commercial', 'other') NOT NULL DEFAULT 'private_house',
+      building_type VARCHAR(80) NOT NULL DEFAULT 'private_house',
       notes TEXT NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -208,6 +220,7 @@ async function runMigrations() {
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
 
+  await pool.query("ALTER TABLE buildings MODIFY COLUMN building_type VARCHAR(80) NOT NULL DEFAULT 'private_house'");
   await ensureApartmentBuildingDeleteRestriction();
   await pool.query("ALTER TABLE buildings ADD COLUMN IF NOT EXISTS customer_id INT NULL AFTER id");
   await pool.query("ALTER TABLE buildings ADD COLUMN IF NOT EXISTS street VARCHAR(160) NULL AFTER name");
@@ -433,6 +446,7 @@ async function runMigrations() {
 
   await seedUserRoles();
   await seedEmployeeFunctions();
+  await seedBuildingTypes();
   await seedSystemAdmin();
   await cleanupExpiredSessions();
   await seedPropertyData();
@@ -539,6 +553,31 @@ async function seedEmployeeFunctions() {
       WHERE e.function_id IS NULL
         AND e.role_title IS NOT NULL
         AND e.role_title <> ''
+    `
+  );
+}
+
+async function seedBuildingTypes() {
+  await pool.execute(
+    `
+      INSERT INTO building_types (type_key, name, is_system)
+      VALUES
+        ('private_house', 'Privathaus', TRUE),
+        ('multi_family', 'Mehrfamilienhaus', TRUE),
+        ('commercial', 'Gewerbe', TRUE),
+        ('other', 'Sonstiges', TRUE)
+      ON DUPLICATE KEY UPDATE
+        is_system = TRUE
+    `
+  );
+
+  await pool.execute(
+    `
+      INSERT IGNORE INTO building_types (type_key, name, is_system)
+      SELECT DISTINCT building_type, building_type, FALSE
+      FROM buildings
+      WHERE building_type IS NOT NULL
+        AND building_type <> ''
     `
   );
 }
@@ -758,6 +797,7 @@ async function normalizeGermanText() {
     ["employees", "notes"],
     ["employee_functions", "name"],
     ["employee_functions", "notes"],
+    ["building_types", "name"],
     ["user_roles", "name"],
     ["maintenance_plans", "title"],
     ["maintenance_plans", "instructions_html"],
@@ -928,6 +968,7 @@ async function getDashboardSummary() {
   const customers = await listCustomers();
   const employees = await listEmployees();
   const employeeFunctions = await listEmployeeFunctions();
+  const buildingTypes = await listBuildingTypes();
   const userRoles = await listUserRoles();
 
   return {
@@ -939,6 +980,7 @@ async function getDashboardSummary() {
     customers,
     employees,
     employeeFunctions,
+    buildingTypes,
     settings,
     users,
     userRoles
@@ -1772,6 +1814,152 @@ async function deleteEmployeeFunction(id) {
   return { deleted: true };
 }
 
+function slugifyBuildingTypeKey(value) {
+  return normalizeText(value)
+    ?.toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+}
+
+function normalizeBuildingTypeInput(input, existingType = null) {
+  const name = normalizeText(input.name);
+  if (!name) {
+    throw createError("Gebäudetyp ist ein Pflichtfeld.", 400);
+  }
+
+  const typeKey = existingType?.typeKey || slugifyBuildingTypeKey(input.typeKey || name);
+  if (!typeKey) {
+    throw createError("Aus dem Gebäudetyp konnte kein technischer Schlüssel gebildet werden.", 400);
+  }
+
+  return {
+    typeKey,
+    name
+  };
+}
+
+async function listBuildingTypes() {
+  const [rows] = await pool.query(`
+    SELECT
+      bt.type_key AS typeKey,
+      bt.name,
+      bt.is_system AS isSystem,
+      COUNT(b.id) AS buildingCount,
+      bt.created_at AS createdAt
+    FROM building_types bt
+    LEFT JOIN buildings b ON b.building_type = bt.type_key
+    GROUP BY bt.type_key, bt.name, bt.is_system, bt.created_at
+    ORDER BY bt.is_system DESC, FIELD(bt.type_key, 'private_house', 'multi_family', 'commercial', 'other') ASC, bt.name ASC
+  `);
+  return rows;
+}
+
+async function getBuildingTypeByKey(typeKey) {
+  const [[row]] = await pool.execute(
+    `
+      SELECT
+        type_key AS typeKey,
+        name,
+        is_system AS isSystem,
+        created_at AS createdAt
+      FROM building_types
+      WHERE type_key = ?
+    `,
+    [typeKey]
+  );
+  return row;
+}
+
+async function assertBuildingTypeExists(typeKey) {
+  const buildingType = await getBuildingTypeByKey(typeKey);
+  if (!buildingType) {
+    throw createError("Ungültiger Gebäudetyp.", 400);
+  }
+}
+
+function handleDuplicateBuildingType(error) {
+  if (error.code === "ER_DUP_ENTRY") {
+    throw createError("Dieser Gebäudetyp existiert bereits.", 409);
+  }
+
+  throw error;
+}
+
+async function createBuildingType(input) {
+  const buildingType = normalizeBuildingTypeInput(input);
+
+  try {
+    await pool.execute(
+      "INSERT INTO building_types (type_key, name, is_system) VALUES (?, ?, FALSE)",
+      [buildingType.typeKey, buildingType.name]
+    );
+
+    await pool.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('building_type', 0, ?)",
+      [`Gebäudetyp "${buildingType.name}" angelegt.`]
+    );
+
+    return getBuildingTypeByKey(buildingType.typeKey);
+  } catch (error) {
+    handleDuplicateBuildingType(error);
+  }
+}
+
+async function updateBuildingType(typeKey, input) {
+  const existingType = await getBuildingTypeByKey(typeKey);
+  if (!existingType) {
+    throw createError("Gebäudetyp nicht gefunden.", 404);
+  }
+
+  const buildingType = normalizeBuildingTypeInput(input, existingType);
+
+  try {
+    await pool.execute(
+      "UPDATE building_types SET name = ? WHERE type_key = ?",
+      [buildingType.name, existingType.typeKey]
+    );
+
+    await pool.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('building_type', 0, ?)",
+      [`Gebäudetyp "${buildingType.name}" aktualisiert.`]
+    );
+
+    return getBuildingTypeByKey(existingType.typeKey);
+  } catch (error) {
+    handleDuplicateBuildingType(error);
+  }
+}
+
+async function deleteBuildingType(typeKey) {
+  const existingType = await getBuildingTypeByKey(typeKey);
+  if (!existingType) {
+    throw createError("Gebäudetyp nicht gefunden.", 404);
+  }
+
+  if (existingType.isSystem) {
+    throw createError("Die Standard-Gebäudetypen sind geschützt und können nicht gelöscht werden.", 403);
+  }
+
+  const [[{ buildingCount }]] = await pool.execute(
+    "SELECT COUNT(*) AS buildingCount FROM buildings WHERE building_type = ?",
+    [typeKey]
+  );
+  if (Number(buildingCount) > 0) {
+    throw createError("Dieser Gebäudetyp ist noch Gebäuden zugewiesen.", 409);
+  }
+
+  await pool.execute("DELETE FROM building_types WHERE type_key = ?", [typeKey]);
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('building_type', 0, ?)",
+    [`Gebäudetyp "${existingType.name}" gelöscht.`]
+  );
+
+  return { deleted: true };
+}
+
 async function listCustomers() {
   const [rows] = await pool.query(`
     SELECT
@@ -2204,12 +2392,14 @@ async function listProperties() {
       b.country,
       b.address,
       b.building_type AS buildingType,
+      bt.name AS buildingTypeName,
       b.notes,
       COUNT(a.id) AS apartmentCount
     FROM buildings b
     LEFT JOIN customers c ON c.id = b.customer_id
+    LEFT JOIN building_types bt ON bt.type_key = b.building_type
     LEFT JOIN apartments a ON a.building_id = b.id
-    GROUP BY b.id, b.customer_id, c.customer_number, c.name, b.name, b.street, b.house_number, b.postal_code, b.city, b.country, b.address, b.building_type, b.notes
+    GROUP BY b.id, b.customer_id, c.customer_number, c.name, b.name, b.street, b.house_number, b.postal_code, b.city, b.country, b.address, b.building_type, bt.name, b.notes
     ORDER BY b.name ASC
   `);
 
@@ -2262,11 +2452,7 @@ function normalizeBuildingInput(input) {
     throw createError("Gebäudename ist ein Pflichtfeld.", 400);
   }
 
-  const buildingType = input.buildingType || "private_house";
-  const allowedTypes = new Set(["private_house", "multi_family", "commercial", "other"]);
-  if (!allowedTypes.has(buildingType)) {
-    throw createError("Ungültiger Gebäudetyp.", 400);
-  }
+  const buildingType = normalizeText(input.buildingType) || "private_house";
 
   const street = normalizeText(input.street);
   const houseNumber = normalizeText(input.houseNumber);
@@ -2291,6 +2477,7 @@ function normalizeBuildingInput(input) {
 async function createBuilding(input) {
   const building = normalizeBuildingInput(input);
   await assertCustomerExists(building.customerId);
+  await assertBuildingTypeExists(building.buildingType);
 
   const [result] = await pool.execute(
     `
@@ -2350,6 +2537,7 @@ async function updateBuilding(id, input) {
 
   const building = normalizeBuildingInput(input);
   await assertCustomerExists(building.customerId);
+  await assertBuildingTypeExists(building.buildingType);
 
   await pool.execute(
     `
@@ -3883,6 +4071,10 @@ module.exports = {
   createEmployeeFunction,
   updateEmployeeFunction,
   deleteEmployeeFunction,
+  listBuildingTypes,
+  createBuildingType,
+  updateBuildingType,
+  deleteBuildingType,
   listCustomers,
   createCustomer,
   updateCustomer,

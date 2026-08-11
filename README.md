@@ -39,7 +39,7 @@ Ohne Login wird nur die Anmeldeseite ausgeliefert. Mit dem Haken `Angemeldet ble
 
 ## Stammdaten-Workflow
 
-Der Workflow startet bei einem Kunden. Beim Anlegen vergibt DR Maintenance automatisch die nächste Kundennummer im Format `C0000154`, `C0000155` usw.; die Nummer kann in den Stammdaten geändert werden. Vorname und Name werden getrennt gepflegt, ebenso Straße, Hausnummer, PLZ, Ort und Land. Wenn die Rechnungsadresse abweicht, können RE-Empfänger, RE-Straße, RE-Hausnummer, RE-PLZ, RE-Ort und RE-Land separat erfasst werden. Danach werden Gebäude einem Kunden zugewiesen. Wohnungen/Appartments werden in einem eigenen Menüpunkt gepflegt und einem Gebäude sowie optional einem abweichenden Kunden zugeordnet. Gebäude haben ebenfalls getrennte Adressfelder für Straße, Hausnummer, PLZ, Ort und Land. Wartungsobjekte wie Klimaanlage oder Dampfbad hängen anschließend an einem Gebäude oder Appartment. Wartungspläne werden auf Basis dieser Wartungsobjekte angelegt.
+Der Workflow startet bei einem Kunden. Beim Anlegen vergibt DR Maintenance automatisch die nächste Kundennummer im Format `C0000154`, `C0000155` usw.; die Nummer kann in den Stammdaten geändert werden. Vorname und Name werden getrennt gepflegt, ebenso Straße, Hausnummer, PLZ, Ort und Land. Wenn die Rechnungsadresse abweicht, können RE-Empfänger, RE-Straße, RE-Hausnummer, RE-PLZ, RE-Ort und RE-Land separat erfasst werden. Danach werden Gebäude einem Kunden zugewiesen. Gebäudetypen werden in den Stammdaten gepflegt und im Gebäudeformular sowie im Gebäudefilter dynamisch angeboten. Wohnungen/Appartments werden in einem eigenen Menüpunkt gepflegt und einem Gebäude sowie optional einem abweichenden Kunden zugeordnet. Gebäude haben ebenfalls getrennte Adressfelder für Straße, Hausnummer, PLZ, Ort und Land. Wartungsobjekte wie Klimaanlage oder Dampfbad hängen anschließend an einem Gebäude oder Appartment. Wartungspläne werden auf Basis dieser Wartungsobjekte angelegt.
 
 Verknüpfte Felder wie Kunde, Gebäude, Objekt-Zuordnung und Wartungsobjekt sind als durchsuchbare Auswahlfelder umgesetzt. Auch Länderfelder sind als vorbefüllte Dropdowns mit Live-Suche umgesetzt, z.B. kann `Österreich` vorgetippt und direkt ausgewählt werden. Beim Tippen wird die Ergebnisliste live eingeschränkt; gespeichert wird weiterhin die eindeutige interne ID bzw. beim Land der Ländername.
 
@@ -77,6 +77,10 @@ Mitarbeiternummern werden automatisch fortlaufend im Format `M0001`, `M0002` usw
 - `POST /api/employee-functions`
 - `PATCH /api/employee-functions/:id`
 - `DELETE /api/employee-functions/:id`
+- `GET /api/building-types`
+- `POST /api/building-types`
+- `PATCH /api/building-types/:typeKey`
+- `DELETE /api/building-types/:typeKey`
 - `GET /api/properties`
 - `POST /api/buildings`
 - `PATCH /api/buildings/:id`

@@ -127,6 +127,22 @@
               <button class="primary-button span-2" type="submit">Stammdaten speichern</button>
             </form>
             <div class="section-divider">
+              <p class="eyebrow">Gebäude</p>
+              <h3>Typen</h3>
+            </div>
+            <form id="buildingTypeForm" class="form-grid compact-form">
+              <input type="hidden" name="typeKey" id="buildingTypeKeyInput">
+              <label>
+                Gebäudetyp
+                <input name="name" placeholder="z.B. Hotel" required>
+              </label>
+              <div class="form-actions">
+                <button class="primary-button" type="submit" id="buildingTypeSubmitButton">Typ speichern</button>
+                <button class="ghost-button" type="button" id="buildingTypeNewButton">Neu</button>
+              </div>
+            </form>
+            <div class="user-list" id="buildingTypeList"></div>
+            <div class="section-divider">
               <p class="eyebrow">Mitarbeiter</p>
               <h3>Funktionen</h3>
             </div>
@@ -383,11 +399,8 @@
                   </label>
                   <label>
                     Typ
-                    <select name="buildingType">
+                    <select name="buildingType" id="buildingTypeSelect">
                       <option value="private_house">Privathaus</option>
-                      <option value="multi_family">Mehrfamilienhaus</option>
-                      <option value="commercial">Gewerbe</option>
-                      <option value="other">Sonstiges</option>
                     </select>
                   </label>
                   <label>
@@ -435,10 +448,6 @@
                   Typ
                   <select id="propertyTypeFilter">
                     <option value="">Alle Typen</option>
-                    <option value="private_house">Privathaus</option>
-                    <option value="multi_family">Mehrfamilienhaus</option>
-                    <option value="commercial">Gewerbe</option>
-                    <option value="other">Sonstiges</option>
                   </select>
                 </label>
                 <div class="filter-actions">
