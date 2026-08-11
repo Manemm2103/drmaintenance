@@ -1606,16 +1606,16 @@ function renderCalendar(events) {
     const dayEvents = eventsByDate.get(dateKey) || [];
 
     cells.push(`
-      <button class="calendar-day ${dateKey === todayKey ? "is-today" : ""}" type="button" data-calendar-day="${dateKey}">
+      <div class="calendar-day ${dateKey === todayKey ? "is-today" : ""}" role="button" tabindex="0" data-calendar-day="${dateKey}" title="Neuen Wartungsplan für ${formatDate(dateKey)} vorbereiten">
         <span class="calendar-date">${day}</span>
         ${dayEvents.slice(0, 3).map((event) => `
-          <span class="calendar-event" title="${escapeHtml(event.targetName || event.title)}">
+          <button class="calendar-event" type="button" data-calendar-plan="${event.planId || event.id}" title="${escapeHtml(event.targetName || event.title)} öffnen">
             ${escapeHtml(event.targetName || event.title)}
             <small>${escapeHtml([event.employeeName || "", event.intervalDays ? `alle ${event.intervalDays} Tage` : ""].filter(Boolean).join(" - "))}</small>
-          </span>
+          </button>
         `).join("")}
         ${dayEvents.length > 3 ? `<span class="muted">+${dayEvents.length - 3} weitere</span>` : ""}
-      </button>
+      </div>
     `);
   }
 
@@ -2346,6 +2346,16 @@ function setMaintenanceDate(dateKey) {
   showToast(`Wartungsplan für ${formatDate(dateKey)} vorbereiten.`);
 }
 
+function openCalendarMaintenancePlan(planId) {
+  const plan = latestPlans.find((item) => String(item.id) === String(planId));
+  if (!plan) {
+    showToast("Wartungsplan konnte nicht gefunden werden.");
+    return;
+  }
+
+  loadMaintenancePlanIntoForm(plan);
+}
+
 function parseTargetValue(value) {
   const [targetType, targetId] = value.split(":");
   return {
@@ -2455,9 +2465,17 @@ function bindEvents() {
       window.setTimeout(() => scrollToTarget(scrollTarget.dataset.scrollTarget), 0);
     }
 
+    const calendarPlan = event.target.closest("[data-calendar-plan]");
+    if (calendarPlan) {
+      event.stopPropagation();
+      openCalendarMaintenancePlan(calendarPlan.dataset.calendarPlan);
+      return;
+    }
+
     const calendarDay = event.target.closest("[data-calendar-day]");
     if (calendarDay) {
       setMaintenanceDate(calendarDay.dataset.calendarDay);
+      return;
     }
 
     const completeButton = event.target.closest("[data-complete]");
@@ -2634,6 +2652,13 @@ function bindEvents() {
     }
 
     if (event.target.closest("button")) {
+      return;
+    }
+
+    const calendarDay = event.target.closest("[data-calendar-day]");
+    if (calendarDay) {
+      event.preventDefault();
+      setMaintenanceDate(calendarDay.dataset.calendarDay);
       return;
     }
 
