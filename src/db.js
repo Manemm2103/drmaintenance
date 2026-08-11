@@ -14,7 +14,6 @@ const databaseConfig = {
 
 const pool = mysql.createPool(databaseConfig);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-const allowedRoles = new Set(["admin", "manager", "technician", "viewer"]);
 const regularSessionMs = 12 * 60 * 60 * 1000;
 const rememberSessionMs = 60 * 24 * 60 * 60 * 1000;
 const customerMaintenanceWeekdayFields = [
@@ -57,12 +56,14 @@ async function runMigrations() {
       house_number VARCHAR(40) NULL,
       postal_code VARCHAR(20) NULL,
       city VARCHAR(120) NULL,
+      country VARCHAR(80) NULL,
       billing_address_differs BOOLEAN NOT NULL DEFAULT FALSE,
       billing_recipient VARCHAR(180) NULL,
       billing_street VARCHAR(160) NULL,
       billing_house_number VARCHAR(40) NULL,
       billing_postal_code VARCHAR(20) NULL,
       billing_city VARCHAR(120) NULL,
+      billing_country VARCHAR(80) NULL,
       billing_address VARCHAR(240) NULL,
       maintenance_monday BOOLEAN NOT NULL DEFAULT TRUE,
       maintenance_tuesday BOOLEAN NOT NULL DEFAULT TRUE,
@@ -85,12 +86,16 @@ async function runMigrations() {
   await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS house_number VARCHAR(40) NULL AFTER street");
   await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS postal_code VARCHAR(20) NULL AFTER house_number");
   await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS city VARCHAR(120) NULL AFTER postal_code");
-  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_address_differs BOOLEAN NOT NULL DEFAULT FALSE AFTER city");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS country VARCHAR(80) NULL AFTER city");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_address_differs BOOLEAN NOT NULL DEFAULT FALSE AFTER country");
   await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_recipient VARCHAR(180) NULL AFTER billing_address_differs");
   await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_street VARCHAR(160) NULL AFTER billing_recipient");
   await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_house_number VARCHAR(40) NULL AFTER billing_street");
   await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_postal_code VARCHAR(20) NULL AFTER billing_house_number");
   await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_city VARCHAR(120) NULL AFTER billing_postal_code");
+  await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS billing_country VARCHAR(80) NULL AFTER billing_city");
+  await pool.query("UPDATE customers SET country = 'Deutschland' WHERE country IS NULL OR country = ''");
+  await pool.query("UPDATE customers SET billing_country = 'Deutschland' WHERE billing_address_differs = TRUE AND (billing_country IS NULL OR billing_country = '')");
   await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS maintenance_monday BOOLEAN NOT NULL DEFAULT TRUE AFTER billing_address");
   await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS maintenance_tuesday BOOLEAN NOT NULL DEFAULT TRUE AFTER maintenance_monday");
   await pool.query("ALTER TABLE customers ADD COLUMN IF NOT EXISTS maintenance_wednesday BOOLEAN NOT NULL DEFAULT TRUE AFTER maintenance_tuesday");
@@ -140,6 +145,11 @@ async function runMigrations() {
       id INT AUTO_INCREMENT PRIMARY KEY,
       customer_id INT NULL,
       name VARCHAR(180) NOT NULL,
+      street VARCHAR(160) NULL,
+      house_number VARCHAR(40) NULL,
+      postal_code VARCHAR(20) NULL,
+      city VARCHAR(120) NULL,
+      country VARCHAR(80) NULL,
       address VARCHAR(220) NULL,
       building_type ENUM('private_house', 'multi_family', 'commercial', 'other') NOT NULL DEFAULT 'private_house',
       notes TEXT NULL,
@@ -171,6 +181,13 @@ async function runMigrations() {
   `);
 
   await pool.query("ALTER TABLE buildings ADD COLUMN IF NOT EXISTS customer_id INT NULL AFTER id");
+  await pool.query("ALTER TABLE buildings ADD COLUMN IF NOT EXISTS street VARCHAR(160) NULL AFTER name");
+  await pool.query("ALTER TABLE buildings ADD COLUMN IF NOT EXISTS house_number VARCHAR(40) NULL AFTER street");
+  await pool.query("ALTER TABLE buildings ADD COLUMN IF NOT EXISTS postal_code VARCHAR(20) NULL AFTER house_number");
+  await pool.query("ALTER TABLE buildings ADD COLUMN IF NOT EXISTS city VARCHAR(120) NULL AFTER postal_code");
+  await pool.query("ALTER TABLE buildings ADD COLUMN IF NOT EXISTS country VARCHAR(80) NULL AFTER city");
+  await pool.query("UPDATE buildings SET street = address WHERE (street IS NULL OR street = '') AND address IS NOT NULL AND address <> ''");
+  await pool.query("UPDATE buildings SET country = 'Deutschland' WHERE country IS NULL OR country = ''");
   await pool.query("ALTER TABLE buildings ADD INDEX IF NOT EXISTS idx_buildings_customer (customer_id)");
   await pool.query("ALTER TABLE apartments ADD COLUMN IF NOT EXISTS customer_id INT NULL AFTER building_id");
   await pool.query("ALTER TABLE apartments ADD INDEX IF NOT EXISTS idx_apartments_customer (customer_id)");
@@ -180,9 +197,21 @@ async function runMigrations() {
   await pool.query("ALTER TABLE assets ADD INDEX IF NOT EXISTS idx_assets_apartment (apartment_id)");
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS employee_functions (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      name VARCHAR(120) NOT NULL,
+      notes TEXT NULL,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_employee_functions_name (name)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS employees (
       id INT AUTO_INCREMENT PRIMARY KEY,
       employee_number VARCHAR(24) NULL,
+      function_id INT NULL,
       first_name VARCHAR(100) NOT NULL,
       last_name VARCHAR(120) NOT NULL,
       email VARCHAR(190) NULL,
@@ -193,10 +222,13 @@ async function runMigrations() {
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       UNIQUE KEY uq_employees_number (employee_number),
+      INDEX idx_employees_function (function_id),
       INDEX idx_employees_name (last_name, first_name),
       INDEX idx_employees_active (active)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await pool.query("ALTER TABLE employees ADD COLUMN IF NOT EXISTS function_id INT NULL AFTER employee_number");
+  await pool.query("ALTER TABLE employees ADD INDEX IF NOT EXISTS idx_employees_function (function_id)");
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS maintenance_plans (
@@ -250,12 +282,24 @@ async function runMigrations() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_roles (
+      role_key VARCHAR(80) PRIMARY KEY,
+      name VARCHAR(120) NOT NULL,
+      is_system BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      UNIQUE KEY uq_user_roles_name (name),
+      INDEX idx_user_roles_system (is_system)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id INT AUTO_INCREMENT PRIMARY KEY,
       username VARCHAR(80) NOT NULL,
       display_name VARCHAR(160) NOT NULL,
       email VARCHAR(190) NULL,
-      role ENUM('admin', 'manager', 'technician', 'viewer') NOT NULL DEFAULT 'technician',
+      role VARCHAR(80) NOT NULL DEFAULT 'customer',
       password_hash VARCHAR(160) NOT NULL,
       password_salt VARCHAR(80) NOT NULL,
       active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -269,6 +313,7 @@ async function runMigrations() {
       INDEX idx_users_system (is_system)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await pool.query("ALTER TABLE users MODIFY COLUMN role VARCHAR(80) NOT NULL DEFAULT 'customer'");
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS user_sessions (
@@ -324,6 +369,8 @@ async function runMigrations() {
     ["skip_sundays_for_maintenance", weekendDefault]
   );
 
+  await seedUserRoles();
+  await seedEmployeeFunctions();
   await seedSystemAdmin();
   await cleanupExpiredSessions();
   await seedPropertyData();
@@ -365,6 +412,7 @@ function toPublicUser(row) {
     displayName: row.displayName,
     email: row.email,
     role: row.role,
+    roleName: row.roleName || row.role,
     active: Boolean(row.active),
     isSystem: Boolean(row.isSystem)
   };
@@ -377,6 +425,60 @@ function getInitialAdminConfig() {
     displayName: process.env.ADMIN_DISPLAY_NAME || "System Administrator",
     email: process.env.ADMIN_EMAIL || "admin@drmaintenance.local"
   };
+}
+
+async function seedUserRoles() {
+  await pool.execute(
+    `
+      INSERT INTO user_roles (role_key, name, is_system)
+      VALUES
+        ('admin', 'Admin', TRUE),
+        ('customer', 'Kunde', TRUE)
+      ON DUPLICATE KEY UPDATE
+        name = VALUES(name),
+        is_system = TRUE
+    `
+  );
+
+  await pool.execute(
+    `
+      INSERT IGNORE INTO user_roles (role_key, name, is_system)
+      SELECT DISTINCT role, role, FALSE
+      FROM users
+      WHERE role IS NOT NULL
+        AND role NOT IN ('admin', 'customer')
+    `
+  );
+}
+
+async function seedEmployeeFunctions() {
+  await pool.execute(
+    `
+      INSERT IGNORE INTO employee_functions (name)
+      VALUES ('Techniker'), ('Hausmeister')
+    `
+  );
+
+  await pool.execute(
+    `
+      INSERT IGNORE INTO employee_functions (name)
+      SELECT DISTINCT role_title
+      FROM employees
+      WHERE role_title IS NOT NULL
+        AND role_title <> ''
+    `
+  );
+
+  await pool.execute(
+    `
+      UPDATE employees e
+      INNER JOIN employee_functions f ON f.name = e.role_title
+      SET e.function_id = f.id
+      WHERE e.function_id IS NULL
+        AND e.role_title IS NOT NULL
+        AND e.role_title <> ''
+    `
+  );
 }
 
 async function seedSystemAdmin() {
@@ -502,20 +604,21 @@ async function seedPropertyData() {
         house_number,
         postal_code,
         city,
+        country,
         billing_address_differs,
         notes
       )
       VALUES
-        ('C0000154', 'Max', 'Mustermann', 'Max Mustermann', 'Max Mustermann', 'kunde@example.com', '+49 000 000000', 'Musterstraße', '12', '12345', 'Musterstadt', FALSE, 'Beispielkunde für den neuen Kundenworkflow.')
+        ('C0000154', 'Max', 'Mustermann', 'Max Mustermann', 'Max Mustermann', 'kunde@example.com', '+49 000 000000', 'Musterstraße', '12', '12345', 'Musterstadt', 'Deutschland', FALSE, 'Beispielkunde für den neuen Kundenworkflow.')
     `
   );
 
   const [buildingResult] = await pool.query(
     `
-      INSERT INTO buildings (customer_id, name, address, building_type, notes)
+      INSERT INTO buildings (customer_id, name, street, house_number, postal_code, city, country, address, building_type, notes)
       VALUES
-        (?, 'DR Home Privathaus', 'Musterstraße 12', 'private_house', 'Einzelobjekt ohne Appartments.'),
-        (?, 'Wohnhaus Gartenblick', 'Gartenweg 8', 'multi_family', 'Mehrparteienhaus mit Appartments.')
+        (?, 'DR Home Privathaus', 'Musterstraße', '12', '12345', 'Musterstadt', 'Deutschland', 'Musterstraße 12, 12345 Musterstadt, Deutschland', 'private_house', 'Einzelobjekt ohne Appartments.'),
+        (?, 'Wohnhaus Gartenblick', 'Gartenweg', '8', '12345', 'Musterstadt', 'Deutschland', 'Gartenweg 8, 12345 Musterstadt, Deutschland', 'multi_family', 'Mehrparteienhaus mit Appartments.')
     `,
     [customerResult.insertId, customerResult.insertId]
   );
@@ -573,9 +676,11 @@ async function normalizeGermanText() {
     ["customers", "contact_name"],
     ["customers", "street"],
     ["customers", "city"],
+    ["customers", "country"],
     ["customers", "billing_recipient"],
     ["customers", "billing_street"],
     ["customers", "billing_city"],
+    ["customers", "billing_country"],
     ["customers", "billing_address"],
     ["customers", "notes"],
     ["assets", "name"],
@@ -585,12 +690,18 @@ async function normalizeGermanText() {
     ["employees", "last_name"],
     ["employees", "role_title"],
     ["employees", "notes"],
+    ["employee_functions", "name"],
+    ["employee_functions", "notes"],
+    ["user_roles", "name"],
     ["maintenance_plans", "title"],
     ["maintenance_plans", "instructions_html"],
     ["work_orders", "title"],
     ["work_orders", "description"],
     ["activity_log", "message"],
     ["buildings", "name"],
+    ["buildings", "street"],
+    ["buildings", "city"],
+    ["buildings", "country"],
     ["buildings", "address"],
     ["buildings", "notes"],
     ["apartments", "name"],
@@ -722,6 +833,7 @@ async function getDashboardSummary() {
       COALESCE(apartment_customer.house_number, inherited_customer.house_number, building_customer.house_number) AS customerHouseNumber,
       COALESCE(apartment_customer.postal_code, inherited_customer.postal_code, building_customer.postal_code) AS customerPostalCode,
       COALESCE(apartment_customer.city, inherited_customer.city, building_customer.city) AS customerCity,
+      COALESCE(apartment_customer.country, inherited_customer.country, building_customer.country) AS customerCountry,
       a.name,
       a.asset_type AS assetType,
       a.location,
@@ -747,6 +859,8 @@ async function getDashboardSummary() {
   const users = await listUsers();
   const customers = await listCustomers();
   const employees = await listEmployees();
+  const employeeFunctions = await listEmployeeFunctions();
+  const userRoles = await listUserRoles();
 
   return {
     summary,
@@ -756,8 +870,10 @@ async function getDashboardSummary() {
     activity,
     customers,
     employees,
+    employeeFunctions,
     settings,
-    users
+    users,
+    userRoles
   };
 }
 
@@ -767,8 +883,9 @@ function createError(message, statusCode) {
   return error;
 }
 
-function assertValidRole(role) {
-  if (!allowedRoles.has(role)) {
+async function assertValidUserRole(role) {
+  const [[userRole]] = await pool.execute("SELECT role_key FROM user_roles WHERE role_key = ?", [role]);
+  if (!userRole) {
     throw createError("Ungültige Benutzerrolle.", 400);
   }
 }
@@ -778,7 +895,7 @@ function normalizeUserInput(input) {
     username: input.username?.trim(),
     displayName: input.displayName?.trim(),
     email: input.email?.trim() || null,
-    role: input.role || "technician",
+    role: input.role || "customer",
     password: input.password
   };
 }
@@ -857,13 +974,15 @@ async function authenticateUser(username, password) {
         username,
         display_name AS displayName,
         email,
-        role,
-        active,
-        is_system AS isSystem,
-        password_hash AS passwordHash,
-        password_salt AS passwordSalt
-      FROM users
-      WHERE username = ?
+        u.role,
+        r.name AS roleName,
+        u.active,
+        u.is_system AS isSystem,
+        u.password_hash AS passwordHash,
+        u.password_salt AS passwordSalt
+      FROM users u
+      LEFT JOIN user_roles r ON r.role_key = u.role
+      WHERE u.username = ?
       LIMIT 1
     `,
     [username?.trim()]
@@ -912,10 +1031,12 @@ async function getUserBySessionToken(token) {
         u.display_name AS displayName,
         u.email,
         u.role,
+        r.name AS roleName,
         u.active,
         u.is_system AS isSystem
       FROM user_sessions s
       INNER JOIN users u ON u.id = s.user_id
+      LEFT JOIN user_roles r ON r.role_key = u.role
       WHERE s.session_hash = ?
         AND s.expires_at > NOW()
         AND u.active = TRUE
@@ -947,23 +1068,25 @@ async function cleanupExpiredSessions() {
 async function listUsers() {
   const [rows] = await pool.query(`
     SELECT
-      id,
-      username,
-      display_name AS displayName,
-      email,
-      role,
-      active,
-      is_system AS isSystem,
-      created_at AS createdAt
-    FROM users
-    ORDER BY is_system DESC, username ASC
+      u.id,
+      u.username,
+      u.display_name AS displayName,
+      u.email,
+      u.role,
+      r.name AS roleName,
+      u.active,
+      u.is_system AS isSystem,
+      u.created_at AS createdAt
+    FROM users u
+    LEFT JOIN user_roles r ON r.role_key = u.role
+    ORDER BY u.is_system DESC, u.username ASC
   `);
   return rows;
 }
 
 async function createUser(input) {
   const user = normalizeUserInput(input);
-  assertValidRole(user.role);
+  await assertValidUserRole(user.role);
 
   if (!user.username || !user.displayName || !user.password) {
     throw createError("Benutzername, Anzeigename und Passwort sind Pflichtfelder.", 400);
@@ -1002,16 +1125,18 @@ async function getUserById(id) {
   const [[row]] = await pool.execute(
     `
       SELECT
-        id,
-        username,
-        display_name AS displayName,
-        email,
-        role,
-        active,
-        is_system AS isSystem,
-        created_at AS createdAt
-      FROM users
-      WHERE id = ?
+        u.id,
+        u.username,
+        u.display_name AS displayName,
+        u.email,
+        u.role,
+        r.name AS roleName,
+        u.active,
+        u.is_system AS isSystem,
+        u.created_at AS createdAt
+      FROM users u
+      LEFT JOIN user_roles r ON r.role_key = u.role
+      WHERE u.id = ?
     `,
     [id]
   );
@@ -1042,7 +1167,7 @@ async function updateUser(id, input) {
   }
 
   if (input.role !== undefined) {
-    assertValidRole(input.role);
+    await assertValidUserRole(input.role);
     updates.push("role = ?");
     params.push(input.role);
   }
@@ -1104,27 +1229,186 @@ async function deleteUser(id) {
   return { deleted: true };
 }
 
-async function listEmployees() {
+function slugifyRoleKey(value) {
+  return normalizeText(value)
+    ?.toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/ä/g, "ae")
+    .replace(/ö/g, "oe")
+    .replace(/ü/g, "ue")
+    .replace(/ß/g, "ss")
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 80);
+}
+
+function normalizeUserRoleInput(input, existingRole = null) {
+  const name = normalizeText(input.name);
+  if (!name) {
+    throw createError("Rollenname ist ein Pflichtfeld.", 400);
+  }
+
+  const roleKey = existingRole?.roleKey || slugifyRoleKey(input.roleKey || name);
+  if (!roleKey) {
+    throw createError("Aus dem Rollennamen konnte kein technischer Schlüssel gebildet werden.", 400);
+  }
+
+  return {
+    roleKey,
+    name
+  };
+}
+
+async function listUserRoles() {
   const [rows] = await pool.query(`
     SELECT
-      id,
-      employee_number AS employeeNumber,
-      first_name AS firstName,
-      last_name AS lastName,
-      CONCAT(first_name, ' ', last_name) AS name,
-      email,
-      phone,
-      role_title AS roleTitle,
-      active,
-      notes,
-      created_at AS createdAt
-    FROM employees
-    ORDER BY active DESC, last_name ASC, first_name ASC
+      r.role_key AS roleKey,
+      r.name,
+      r.is_system AS isSystem,
+      COUNT(u.id) AS userCount,
+      r.created_at AS createdAt
+    FROM user_roles r
+    LEFT JOIN users u ON u.role = r.role_key
+    GROUP BY r.role_key, r.name, r.is_system, r.created_at
+    ORDER BY r.is_system DESC, FIELD(r.role_key, 'admin', 'customer') ASC, r.name ASC
   `);
   return rows;
 }
 
-function normalizeEmployeeInput(input, existingEmployee = null) {
+async function getUserRoleByKey(roleKey) {
+  const [[row]] = await pool.execute(
+    `
+      SELECT
+        role_key AS roleKey,
+        name,
+        is_system AS isSystem,
+        created_at AS createdAt
+      FROM user_roles
+      WHERE role_key = ?
+    `,
+    [roleKey]
+  );
+  return row;
+}
+
+function handleDuplicateUserRole(error) {
+  if (error.code === "ER_DUP_ENTRY") {
+    throw createError("Diese Rolle existiert bereits.", 409);
+  }
+
+  throw error;
+}
+
+async function createUserRole(input) {
+  const userRole = normalizeUserRoleInput(input);
+
+  try {
+    await pool.execute(
+      "INSERT INTO user_roles (role_key, name, is_system) VALUES (?, ?, FALSE)",
+      [userRole.roleKey, userRole.name]
+    );
+
+    await pool.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('user_role', 0, ?)",
+      [`Rolle "${userRole.name}" angelegt.`]
+    );
+
+    return getUserRoleByKey(userRole.roleKey);
+  } catch (error) {
+    handleDuplicateUserRole(error);
+  }
+}
+
+async function updateUserRole(roleKey, input) {
+  const existingRole = await getUserRoleByKey(roleKey);
+  if (!existingRole) {
+    throw createError("Rolle nicht gefunden.", 404);
+  }
+
+  const userRole = normalizeUserRoleInput(input, existingRole);
+  await pool.execute(
+    "UPDATE user_roles SET name = ? WHERE role_key = ?",
+    [userRole.name, existingRole.roleKey]
+  );
+
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('user_role', 0, ?)",
+    [`Rolle "${userRole.name}" aktualisiert.`]
+  );
+
+  return getUserRoleByKey(existingRole.roleKey);
+}
+
+async function deleteUserRole(roleKey) {
+  const existingRole = await getUserRoleByKey(roleKey);
+  if (!existingRole) {
+    throw createError("Rolle nicht gefunden.", 404);
+  }
+
+  if (existingRole.isSystem) {
+    throw createError("Admin und Kunde sind Systemrollen und können nicht gelöscht werden.", 403);
+  }
+
+  const [[{ userCount }]] = await pool.execute("SELECT COUNT(*) AS userCount FROM users WHERE role = ?", [roleKey]);
+  if (Number(userCount) > 0) {
+    throw createError("Diese Rolle ist noch Benutzern zugewiesen.", 409);
+  }
+
+  await pool.execute("DELETE FROM user_roles WHERE role_key = ?", [roleKey]);
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('user_role', 0, ?)",
+    [`Rolle "${existingRole.name}" gelöscht.`]
+  );
+
+  return { deleted: true };
+}
+
+async function listEmployees() {
+  const [rows] = await pool.query(`
+    SELECT
+      e.id,
+      e.employee_number AS employeeNumber,
+      e.function_id AS functionId,
+      e.first_name AS firstName,
+      e.last_name AS lastName,
+      CONCAT(e.first_name, ' ', e.last_name) AS name,
+      e.email,
+      e.phone,
+      COALESCE(f.name, e.role_title) AS roleTitle,
+      f.name AS functionName,
+      e.active,
+      e.notes,
+      e.created_at AS createdAt
+    FROM employees e
+    LEFT JOIN employee_functions f ON f.id = e.function_id
+    ORDER BY e.active DESC, e.last_name ASC, e.first_name ASC
+  `);
+  return rows;
+}
+
+async function generateEmployeeNumber() {
+  const [[row]] = await pool.query(`
+    SELECT MAX(CAST(SUBSTRING(employee_number, 2) AS UNSIGNED)) AS maxNumber
+    FROM employees
+    WHERE employee_number REGEXP '^M[0-9]+$'
+  `);
+  const nextNumber = Math.max(Number(row.maxNumber || 0) + 1, 1);
+  return `M${String(nextNumber).padStart(4, "0")}`;
+}
+
+async function assertEmployeeFunctionExists(functionId) {
+  if (!functionId) {
+    return;
+  }
+
+  const [[employeeFunction]] = await pool.execute("SELECT id FROM employee_functions WHERE id = ?", [functionId]);
+  if (!employeeFunction) {
+    throw createError("Die ausgewählte Funktion existiert nicht.", 400);
+  }
+}
+
+async function normalizeEmployeeInput(input, existingEmployee = null) {
   const firstName = normalizeText(input.firstName) || existingEmployee?.firstName;
   const lastName = normalizeText(input.lastName) || existingEmployee?.lastName;
 
@@ -1132,8 +1416,14 @@ function normalizeEmployeeInput(input, existingEmployee = null) {
     throw createError("Vorname und Name sind Pflichtfelder.", 400);
   }
 
+  const functionId = input.functionId === undefined
+    ? Number(existingEmployee?.functionId) || null
+    : Number(input.functionId) || null;
+  await assertEmployeeFunctionExists(functionId);
+
   return {
-    employeeNumber: input.employeeNumber === undefined ? existingEmployee?.employeeNumber || null : normalizeText(input.employeeNumber),
+    employeeNumber: normalizeText(input.employeeNumber) || existingEmployee?.employeeNumber || await generateEmployeeNumber(),
+    functionId,
     firstName,
     lastName,
     email: input.email === undefined ? existingEmployee?.email || null : normalizeText(input.email),
@@ -1156,19 +1446,22 @@ async function getEmployeeById(id) {
   const [[row]] = await pool.execute(
     `
       SELECT
-        id,
-        employee_number AS employeeNumber,
-        first_name AS firstName,
-        last_name AS lastName,
-        CONCAT(first_name, ' ', last_name) AS name,
-        email,
-        phone,
-        role_title AS roleTitle,
-        active,
-        notes,
-        created_at AS createdAt
-      FROM employees
-      WHERE id = ?
+        e.id,
+        e.employee_number AS employeeNumber,
+        e.function_id AS functionId,
+        e.first_name AS firstName,
+        e.last_name AS lastName,
+        CONCAT(e.first_name, ' ', e.last_name) AS name,
+        e.email,
+        e.phone,
+        COALESCE(f.name, e.role_title) AS roleTitle,
+        f.name AS functionName,
+        e.active,
+        e.notes,
+        e.created_at AS createdAt
+      FROM employees e
+      LEFT JOIN employee_functions f ON f.id = e.function_id
+      WHERE e.id = ?
     `,
     [id]
   );
@@ -1187,13 +1480,14 @@ async function assertEmployeeExists(employeeId) {
 }
 
 async function createEmployee(input) {
-  const employee = normalizeEmployeeInput(input);
+  const employee = await normalizeEmployeeInput(input);
 
   try {
     const [result] = await pool.execute(
       `
         INSERT INTO employees (
           employee_number,
+          function_id,
           first_name,
           last_name,
           email,
@@ -1202,10 +1496,11 @@ async function createEmployee(input) {
           active,
           notes
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         employee.employeeNumber,
+        employee.functionId,
         employee.firstName,
         employee.lastName,
         employee.email,
@@ -1233,7 +1528,7 @@ async function updateEmployee(id, input) {
     throw createError("Mitarbeiter nicht gefunden.", 404);
   }
 
-  const employee = normalizeEmployeeInput(input, existingEmployee);
+  const employee = await normalizeEmployeeInput(input, existingEmployee);
 
   try {
     await pool.execute(
@@ -1241,6 +1536,7 @@ async function updateEmployee(id, input) {
         UPDATE employees
         SET
           employee_number = ?,
+          function_id = ?,
           first_name = ?,
           last_name = ?,
           email = ?,
@@ -1252,6 +1548,7 @@ async function updateEmployee(id, input) {
       `,
       [
         employee.employeeNumber,
+        employee.functionId,
         employee.firstName,
         employee.lastName,
         employee.email,
@@ -1290,6 +1587,123 @@ async function deleteEmployee(id) {
   return { deleted: true };
 }
 
+async function listEmployeeFunctions() {
+  const [rows] = await pool.query(`
+    SELECT
+      f.id,
+      f.name,
+      f.notes,
+      COUNT(e.id) AS employeeCount,
+      f.created_at AS createdAt
+    FROM employee_functions f
+    LEFT JOIN employees e ON e.function_id = f.id
+    GROUP BY f.id, f.name, f.notes, f.created_at
+    ORDER BY f.name ASC
+  `);
+  return rows;
+}
+
+function normalizeEmployeeFunctionInput(input) {
+  const name = normalizeText(input.name);
+  if (!name) {
+    throw createError("Funktionsname ist ein Pflichtfeld.", 400);
+  }
+
+  return {
+    name,
+    notes: normalizeText(input.notes)
+  };
+}
+
+async function getEmployeeFunctionById(id) {
+  const [[row]] = await pool.execute(
+    `
+      SELECT
+        id,
+        name,
+        notes,
+        created_at AS createdAt
+      FROM employee_functions
+      WHERE id = ?
+    `,
+    [id]
+  );
+  return row;
+}
+
+function handleDuplicateEmployeeFunction(error) {
+  if (error.code === "ER_DUP_ENTRY") {
+    throw createError("Diese Funktion existiert bereits.", 409);
+  }
+
+  throw error;
+}
+
+async function createEmployeeFunction(input) {
+  const employeeFunction = normalizeEmployeeFunctionInput(input);
+
+  try {
+    const [result] = await pool.execute(
+      "INSERT INTO employee_functions (name, notes) VALUES (?, ?)",
+      [employeeFunction.name, employeeFunction.notes]
+    );
+
+    await pool.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('employee_function', ?, ?)",
+      [result.insertId, `Funktion "${employeeFunction.name}" angelegt.`]
+    );
+
+    return getEmployeeFunctionById(result.insertId);
+  } catch (error) {
+    handleDuplicateEmployeeFunction(error);
+  }
+}
+
+async function updateEmployeeFunction(id, input) {
+  const existingFunction = await getEmployeeFunctionById(id);
+  if (!existingFunction) {
+    throw createError("Funktion nicht gefunden.", 404);
+  }
+
+  const employeeFunction = normalizeEmployeeFunctionInput(input);
+
+  try {
+    await pool.execute(
+      "UPDATE employee_functions SET name = ?, notes = ? WHERE id = ?",
+      [employeeFunction.name, employeeFunction.notes, id]
+    );
+
+    await pool.execute(
+      "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('employee_function', ?, ?)",
+      [id, `Funktion "${employeeFunction.name}" aktualisiert.`]
+    );
+
+    return getEmployeeFunctionById(id);
+  } catch (error) {
+    handleDuplicateEmployeeFunction(error);
+  }
+}
+
+async function deleteEmployeeFunction(id) {
+  const existingFunction = await getEmployeeFunctionById(id);
+  if (!existingFunction) {
+    throw createError("Funktion nicht gefunden.", 404);
+  }
+
+  const [[{ employeeCount }]] = await pool.execute("SELECT COUNT(*) AS employeeCount FROM employees WHERE function_id = ?", [id]);
+  if (Number(employeeCount) > 0) {
+    throw createError("Diese Funktion ist noch Mitarbeitern zugewiesen.", 409);
+  }
+
+  await pool.execute("DELETE FROM employee_functions WHERE id = ?", [id]);
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('employee_function', ?, ?)",
+    [id, `Funktion "${existingFunction.name}" gelöscht.`]
+  );
+
+  return { deleted: true };
+}
+
 async function listCustomers() {
   const [rows] = await pool.query(`
     SELECT
@@ -1305,12 +1719,14 @@ async function listCustomers() {
       house_number AS houseNumber,
       postal_code AS postalCode,
       city,
+      country,
       billing_address_differs AS billingAddressDiffers,
       billing_recipient AS billingRecipient,
       billing_street AS billingStreet,
       billing_house_number AS billingHouseNumber,
       billing_postal_code AS billingPostalCode,
       billing_city AS billingCity,
+      billing_country AS billingCountry,
       billing_address AS billingAddress,
       maintenance_monday AS maintenanceMonday,
       maintenance_tuesday AS maintenanceTuesday,
@@ -1381,10 +1797,10 @@ function combineName(firstName, lastName) {
   return [firstName, lastName].filter(Boolean).join(" ");
 }
 
-function combineAddress(street, houseNumber, postalCode, city) {
+function combineAddress(street, houseNumber, postalCode, city, country) {
   const streetLine = [street, houseNumber].filter(Boolean).join(" ");
   const cityLine = [postalCode, city].filter(Boolean).join(" ");
-  return [streetLine, cityLine].filter(Boolean).join(", ") || null;
+  return [streetLine, cityLine, country].filter(Boolean).join(", ") || null;
 }
 
 async function normalizeCustomerInput(input, existingCustomer = null) {
@@ -1408,16 +1824,18 @@ async function normalizeCustomerInput(input, existingCustomer = null) {
   const houseNumber = normalizeText(input.houseNumber) || null;
   const postalCode = normalizeText(input.postalCode) || null;
   const city = normalizeText(input.city) || null;
+  const country = normalizeText(input.country) || existingCustomer?.country || "Deutschland";
   const billingAddressDiffers = parseBoolean(input.billingAddressDiffers);
   const billingRecipient = billingAddressDiffers ? normalizeText(input.billingRecipient) : null;
   const billingStreet = billingAddressDiffers ? normalizeText(input.billingStreet) : null;
   const billingHouseNumber = billingAddressDiffers ? normalizeText(input.billingHouseNumber) : null;
   const billingPostalCode = billingAddressDiffers ? normalizeText(input.billingPostalCode) : null;
   const billingCity = billingAddressDiffers ? normalizeText(input.billingCity) : null;
+  const billingCountry = billingAddressDiffers ? (normalizeText(input.billingCountry) || country) : null;
   const maintenanceWeekdays = normalizeCustomerMaintenanceWeekdays(input, existingCustomer);
 
-  if (billingAddressDiffers && (!billingRecipient || !billingStreet || !billingHouseNumber || !billingPostalCode || !billingCity)) {
-    throw createError("Bei abweichender Rechnungsadresse sind Empfänger, Straße, Hausnummer, PLZ und Ort Pflichtfelder.", 400);
+  if (billingAddressDiffers && (!billingRecipient || !billingStreet || !billingHouseNumber || !billingPostalCode || !billingCity || !billingCountry)) {
+    throw createError("Bei abweichender Rechnungsadresse sind Empfänger, Straße, Hausnummer, PLZ, Ort und Land Pflichtfelder.", 400);
   }
 
   return {
@@ -1432,15 +1850,17 @@ async function normalizeCustomerInput(input, existingCustomer = null) {
     houseNumber,
     postalCode,
     city,
+    country,
     billingAddressDiffers,
     billingRecipient,
     billingStreet,
     billingHouseNumber,
     billingPostalCode,
     billingCity,
+    billingCountry,
     billingAddress: billingAddressDiffers
-      ? combineAddress(billingStreet, billingHouseNumber, billingPostalCode, billingCity)
-      : combineAddress(street, houseNumber, postalCode, city),
+      ? combineAddress(billingStreet, billingHouseNumber, billingPostalCode, billingCity, billingCountry)
+      : combineAddress(street, houseNumber, postalCode, city, country),
     ...maintenanceWeekdays,
     notes: normalizeText(input.notes)
   };
@@ -1483,12 +1903,14 @@ async function createCustomer(input) {
           house_number,
           postal_code,
           city,
+          country,
           billing_address_differs,
           billing_recipient,
           billing_street,
           billing_house_number,
           billing_postal_code,
           billing_city,
+          billing_country,
           billing_address,
           maintenance_monday,
           maintenance_tuesday,
@@ -1499,7 +1921,7 @@ async function createCustomer(input) {
           maintenance_sunday,
           notes
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
         customer.customerNumber,
@@ -1513,12 +1935,14 @@ async function createCustomer(input) {
         customer.houseNumber,
         customer.postalCode,
         customer.city,
+        customer.country,
         customer.billingAddressDiffers,
         customer.billingRecipient,
         customer.billingStreet,
         customer.billingHouseNumber,
         customer.billingPostalCode,
         customer.billingCity,
+        customer.billingCountry,
         customer.billingAddress,
         customer.maintenanceMonday,
         customer.maintenanceTuesday,
@@ -1558,12 +1982,14 @@ async function getCustomerById(id) {
         house_number AS houseNumber,
         postal_code AS postalCode,
         city,
+        country,
         billing_address_differs AS billingAddressDiffers,
         billing_recipient AS billingRecipient,
         billing_street AS billingStreet,
         billing_house_number AS billingHouseNumber,
         billing_postal_code AS billingPostalCode,
         billing_city AS billingCity,
+        billing_country AS billingCountry,
         billing_address AS billingAddress,
         maintenance_monday AS maintenanceMonday,
         maintenance_tuesday AS maintenanceTuesday,
@@ -1605,12 +2031,14 @@ async function updateCustomer(id, input) {
           house_number = ?,
           postal_code = ?,
           city = ?,
+          country = ?,
           billing_address_differs = ?,
           billing_recipient = ?,
           billing_street = ?,
           billing_house_number = ?,
           billing_postal_code = ?,
           billing_city = ?,
+          billing_country = ?,
           billing_address = ?,
           maintenance_monday = ?,
           maintenance_tuesday = ?,
@@ -1634,12 +2062,14 @@ async function updateCustomer(id, input) {
         customer.houseNumber,
         customer.postalCode,
         customer.city,
+        customer.country,
         customer.billingAddressDiffers,
         customer.billingRecipient,
         customer.billingStreet,
         customer.billingHouseNumber,
         customer.billingPostalCode,
         customer.billingCity,
+        customer.billingCountry,
         customer.billingAddress,
         customer.maintenanceMonday,
         customer.maintenanceTuesday,
@@ -1699,6 +2129,11 @@ async function listProperties() {
       c.customer_number AS customerNumber,
       c.name AS customerName,
       b.name,
+      b.street,
+      b.house_number AS houseNumber,
+      b.postal_code AS postalCode,
+      b.city,
+      b.country,
       b.address,
       b.building_type AS buildingType,
       b.notes,
@@ -1706,7 +2141,7 @@ async function listProperties() {
     FROM buildings b
     LEFT JOIN customers c ON c.id = b.customer_id
     LEFT JOIN apartments a ON a.building_id = b.id
-    GROUP BY b.id, b.customer_id, c.customer_number, c.name, b.name, b.address, b.building_type, b.notes
+    GROUP BY b.id, b.customer_id, c.customer_number, c.name, b.name, b.street, b.house_number, b.postal_code, b.city, b.country, b.address, b.building_type, b.notes
     ORDER BY b.name ASC
   `);
 
@@ -1765,10 +2200,21 @@ function normalizeBuildingInput(input) {
     throw createError("Ungültiger Gebäudetyp.", 400);
   }
 
+  const street = normalizeText(input.street);
+  const houseNumber = normalizeText(input.houseNumber);
+  const postalCode = normalizeText(input.postalCode);
+  const city = normalizeText(input.city);
+  const country = normalizeText(input.country) || "Deutschland";
+
   return {
     customerId: Number(input.customerId) || null,
     name,
-    address: input.address?.trim() || null,
+    street,
+    houseNumber,
+    postalCode,
+    city,
+    country,
+    address: combineAddress(street, houseNumber, postalCode, city, country) || normalizeText(input.address),
     buildingType,
     notes: input.notes?.trim() || null
   };
@@ -1780,12 +2226,17 @@ async function createBuilding(input) {
 
   const [result] = await pool.execute(
     `
-      INSERT INTO buildings (customer_id, name, address, building_type, notes)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO buildings (customer_id, name, street, house_number, postal_code, city, country, address, building_type, notes)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     [
       building.customerId,
       building.name,
+      building.street,
+      building.houseNumber,
+      building.postalCode,
+      building.city,
+      building.country,
       building.address,
       building.buildingType,
       building.notes
@@ -1807,6 +2258,11 @@ async function getBuildingById(id) {
         id,
         customer_id AS customerId,
         name,
+        street,
+        house_number AS houseNumber,
+        postal_code AS postalCode,
+        city,
+        country,
         address,
         building_type AS buildingType,
         notes
@@ -1830,12 +2286,17 @@ async function updateBuilding(id, input) {
   await pool.execute(
     `
       UPDATE buildings
-      SET customer_id = ?, name = ?, address = ?, building_type = ?, notes = ?
+      SET customer_id = ?, name = ?, street = ?, house_number = ?, postal_code = ?, city = ?, country = ?, address = ?, building_type = ?, notes = ?
       WHERE id = ?
     `,
     [
       building.customerId,
       building.name,
+      building.street,
+      building.houseNumber,
+      building.postalCode,
+      building.city,
+      building.country,
       building.address,
       building.buildingType,
       building.notes,
@@ -2649,6 +3110,7 @@ async function listAssets() {
       COALESCE(apartment_customer.house_number, inherited_customer.house_number, building_customer.house_number) AS customerHouseNumber,
       COALESCE(apartment_customer.postal_code, inherited_customer.postal_code, building_customer.postal_code) AS customerPostalCode,
       COALESCE(apartment_customer.city, inherited_customer.city, building_customer.city) AS customerCity,
+      COALESCE(apartment_customer.country, inherited_customer.country, building_customer.country) AS customerCountry,
       a.name,
       a.asset_type AS assetType,
       a.location,
@@ -2816,6 +3278,7 @@ async function getAssetById(id) {
         COALESCE(apartment_customer.house_number, inherited_customer.house_number, building_customer.house_number) AS customerHouseNumber,
         COALESCE(apartment_customer.postal_code, inherited_customer.postal_code, building_customer.postal_code) AS customerPostalCode,
         COALESCE(apartment_customer.city, inherited_customer.city, building_customer.city) AS customerCity,
+        COALESCE(apartment_customer.country, inherited_customer.country, building_customer.country) AS customerCountry,
         a.name,
         a.asset_type AS assetType,
         a.location,
@@ -2988,10 +3451,18 @@ module.exports = {
   createUser,
   updateUser,
   deleteUser,
+  listUserRoles,
+  createUserRole,
+  updateUserRole,
+  deleteUserRole,
   listEmployees,
   createEmployee,
   updateEmployee,
   deleteEmployee,
+  listEmployeeFunctions,
+  createEmployeeFunction,
+  updateEmployeeFunction,
+  deleteEmployeeFunction,
   listCustomers,
   createCustomer,
   updateCustomer,

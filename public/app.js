@@ -25,9 +25,22 @@ const els = {
   planList: document.querySelector("#planList"),
   activityList: document.querySelector("#activityList"),
   customerList: document.querySelector("#customerList"),
+  customerSearchInput: document.querySelector("#customerSearchInput"),
+  customerAddressFilterInput: document.querySelector("#customerAddressFilterInput"),
+  customerWeekdayFilter: document.querySelector("#customerWeekdayFilter"),
+  customerFilterResetButton: document.querySelector("#customerFilterResetButton"),
+  customerResultCount: document.querySelector("#customerResultCount"),
   employeeList: document.querySelector("#employeeList"),
+  employeeFunctionList: document.querySelector("#employeeFunctionList"),
   userList: document.querySelector("#userList"),
+  userRoleList: document.querySelector("#userRoleList"),
   propertyList: document.querySelector("#propertyList"),
+  propertySearchInput: document.querySelector("#propertySearchInput"),
+  propertyCustomerFilter: document.querySelector("#propertyCustomerFilter"),
+  propertyAddressFilterInput: document.querySelector("#propertyAddressFilterInput"),
+  propertyTypeFilter: document.querySelector("#propertyTypeFilter"),
+  propertyFilterResetButton: document.querySelector("#propertyFilterResetButton"),
+  propertyResultCount: document.querySelector("#propertyResultCount"),
   assetSelect: document.querySelector("#assetSelect"),
   assetPropertyTargetSelect: document.querySelector("#assetPropertyTargetSelect"),
   apartmentBuildingSelect: document.querySelector("#apartmentBuildingSelect"),
@@ -35,6 +48,8 @@ const els = {
   apartmentCustomerSelect: document.querySelector("#apartmentCustomerSelect"),
   maintenanceTargetSelect: document.querySelector("#maintenanceTargetSelect"),
   maintenanceEmployeeSelect: document.querySelector("#maintenanceEmployeeSelect"),
+  employeeFunctionSelect: document.querySelector("#employeeFunctionSelect"),
+  userRoleSelect: document.querySelector("#userRoleSelect"),
   maintenanceDueDate: document.querySelector("#maintenanceDueDate"),
   calendarGrid: document.querySelector("#calendarGrid"),
   calendarMonthLabel: document.querySelector("#calendarMonthLabel"),
@@ -69,10 +84,18 @@ const els = {
   employeeSubmitButton: document.querySelector("#employeeSubmitButton"),
   employeeNewButton: document.querySelector("#employeeNewButton"),
   employeeActiveInput: document.querySelector("#employeeActiveInput"),
+  employeeFunctionForm: document.querySelector("#employeeFunctionForm"),
+  employeeFunctionIdInput: document.querySelector("#employeeFunctionIdInput"),
+  employeeFunctionSubmitButton: document.querySelector("#employeeFunctionSubmitButton"),
+  employeeFunctionNewButton: document.querySelector("#employeeFunctionNewButton"),
   appSettingsForm: document.querySelector("#appSettingsForm"),
   skipSaturdaysForMaintenanceInput: document.querySelector("#skipSaturdaysForMaintenanceInput"),
   skipSundaysForMaintenanceInput: document.querySelector("#skipSundaysForMaintenanceInput"),
   userForm: document.querySelector("#userForm"),
+  userRoleForm: document.querySelector("#userRoleForm"),
+  userRoleKeyInput: document.querySelector("#userRoleKeyInput"),
+  userRoleSubmitButton: document.querySelector("#userRoleSubmitButton"),
+  userRoleNewButton: document.querySelector("#userRoleNewButton"),
   toast: document.querySelector("#toast")
 };
 
@@ -92,9 +115,7 @@ const statusLabels = {
 
 const roleLabels = {
   admin: "Admin",
-  manager: "Manager",
-  technician: "Techniker",
-  viewer: "Leser"
+  customer: "Kunde"
 };
 
 const buildingTypeLabels = {
@@ -224,7 +245,9 @@ let latestAssets = [];
 let latestProperties = [];
 let latestCustomers = [];
 let latestEmployees = [];
+let latestEmployeeFunctions = [];
 let latestPlans = [];
+let latestUserRoles = [];
 const searchableSelects = new Map();
 
 async function api(path, options = {}) {
@@ -373,7 +396,9 @@ function initializeSearchableSelects() {
     els.buildingCustomerSelect,
     els.apartmentCustomerSelect,
     els.maintenanceTargetSelect,
-    els.maintenanceEmployeeSelect
+    els.maintenanceEmployeeSelect,
+    els.employeeFunctionSelect,
+    els.userRoleSelect
   ].forEach(createSearchableSelect);
 }
 
@@ -607,15 +632,17 @@ async function loadCurrentUser() {
     return;
   }
 
-  els.currentUser.textContent = `${payload.user.displayName} - ${roleLabels[payload.user.role] || payload.user.role}`;
+  els.currentUser.textContent = `${payload.user.displayName} - ${payload.user.roleName || roleLabels[payload.user.role] || payload.user.role}`;
 }
 
 function renderSummary(payload) {
-  const { summary, workOrders, assets, plans, activity, customers, employees, settings, users } = payload;
+  const { summary, workOrders, assets, plans, activity, customers, employees, employeeFunctions, settings, users, userRoles } = payload;
   latestAssets = assets || [];
   latestCustomers = customers || [];
   latestEmployees = employees || [];
+  latestEmployeeFunctions = employeeFunctions || [];
   latestPlans = plans || [];
+  latestUserRoles = userRoles || [];
 
   els.assetCount.textContent = summary.assetCount;
   els.planCount.textContent = summary.activePlanCount;
@@ -630,10 +657,14 @@ function renderSummary(payload) {
   renderActivity(activity);
   renderCustomers(customers);
   renderEmployees(employees);
+  renderEmployeeFunctions(employeeFunctions);
   renderUsers(users);
+  renderUserRoles(userRoles);
   renderCustomerOptions(customers);
   renderAssetOptions(assets);
   renderEmployeeOptions(employees);
+  renderEmployeeFunctionOptions(employeeFunctions);
+  renderUserRoleOptions(userRoles);
   renderAppSettings(settings);
 }
 
@@ -669,7 +700,7 @@ function renderWorkOrders(workOrders) {
 }
 
 function getAssetAddressLabel(asset) {
-  return formatAddressLabel(asset.customerStreet, asset.customerHouseNumber, asset.customerPostalCode, asset.customerCity);
+  return formatAddressLabel(asset.customerStreet, asset.customerHouseNumber, asset.customerPostalCode, asset.customerCity, asset.customerCountry);
 }
 
 function getAssetSearchText(asset) {
@@ -686,7 +717,8 @@ function getAssetSearchText(asset) {
     asset.customerStreet,
     asset.customerHouseNumber,
     asset.customerPostalCode,
-    asset.customerCity
+    asset.customerCity,
+    asset.customerCountry
   ].filter(Boolean).join(" ");
 }
 
@@ -705,6 +737,7 @@ function getFilteredAssets(assets) {
       asset.customerHouseNumber,
       asset.customerPostalCode,
       asset.customerCity,
+      asset.customerCountry,
       asset.location
     ].filter(Boolean).join(" "));
 
@@ -805,7 +838,7 @@ function renderUsers(users) {
         <div class="list-meta">
           <span>@${escapeHtml(user.username)}</span>
           <span>${escapeHtml(user.email || "Keine E-Mail")}</span>
-          <span>${roleLabels[user.role] || user.role}</span>
+          <span>${escapeHtml(user.roleName || roleLabels[user.role] || user.role)}</span>
           <span>${Number(user.active) === 1 ? "Aktiv" : "Inaktiv"}</span>
         </div>
       </div>
@@ -844,6 +877,54 @@ function renderEmployees(employees) {
   `).join("");
 }
 
+function renderEmployeeFunctions(employeeFunctions) {
+  if (!employeeFunctions || employeeFunctions.length === 0) {
+    els.employeeFunctionList.innerHTML = '<div class="list-item">Keine Funktionen angelegt.</div>';
+    return;
+  }
+
+  els.employeeFunctionList.innerHTML = employeeFunctions.map((employeeFunction) => `
+    <div class="user-item clickable-list-item" role="button" tabindex="0" data-edit-employee-function="${employeeFunction.id}" title="Funktion bearbeiten">
+      <div>
+        <strong>${escapeHtml(employeeFunction.name)}</strong>
+        <div class="list-meta">
+          <span>${Number(employeeFunction.employeeCount || 0)} Mitarbeiter</span>
+          <span>${escapeHtml(employeeFunction.notes || "Keine Notizen")}</span>
+        </div>
+      </div>
+      <div class="user-actions">
+        <button class="compact-button" type="button" title="Funktion löschen" aria-label="Funktion löschen" data-delete-employee-function="${employeeFunction.id}">X</button>
+      </div>
+    </div>
+  `).join("");
+}
+
+function renderUserRoles(userRoles) {
+  if (!userRoles || userRoles.length === 0) {
+    els.userRoleList.innerHTML = '<div class="list-item">Keine Rollen angelegt.</div>';
+    return;
+  }
+
+  els.userRoleList.innerHTML = userRoles.map((role) => `
+    <div class="user-item clickable-list-item" role="button" tabindex="0" data-edit-user-role="${escapeHtml(role.roleKey)}" title="Rolle bearbeiten">
+      <div>
+        <strong>${escapeHtml(role.name)}</strong>
+        <div class="list-meta">
+          <span>${escapeHtml(role.roleKey)}</span>
+          <span>${Number(role.userCount || 0)} Benutzer</span>
+          <span>${Number(role.isSystem) === 1 || role.isSystem === true ? "Systemrolle" : "Eigene Rolle"}</span>
+        </div>
+      </div>
+      <div class="user-actions">
+        ${Number(role.isSystem) === 1 || role.isSystem === true
+          ? '<span class="system-note">geschützt</span>'
+          : `<button class="compact-button" type="button" title="Rolle löschen" aria-label="Rolle löschen" data-delete-user-role="${escapeHtml(role.roleKey)}">X</button>`
+        }
+      </div>
+    </div>
+  `).join("");
+}
+
 function formatCustomerLabel(customerNumber, customerName) {
   if (!customerNumber && !customerName) {
     return "Kein Kunde";
@@ -859,27 +940,85 @@ function formatMaintenanceWeekdays(source) {
   return activeDays.length > 0 ? activeDays.join(", ") : "Keine Wunschtage";
 }
 
-function formatAddressLabel(street, houseNumber, postalCode, city) {
+function formatAddressLabel(street, houseNumber, postalCode, city, country) {
   const streetLine = [street, houseNumber].filter(Boolean).join(" ");
   const cityLine = [postalCode, city].filter(Boolean).join(" ");
-  return [streetLine, cityLine].filter(Boolean).join(", ");
+  return [streetLine, cityLine, country].filter(Boolean).join(", ");
 }
 
-function renderCustomers(customers) {
+function getCustomerSearchText(customer) {
+  return [
+    customer.customerNumber,
+    customer.name,
+    customer.firstName,
+    customer.lastName,
+    customer.contactName,
+    customer.email,
+    customer.phone,
+    customer.street,
+    customer.houseNumber,
+    customer.postalCode,
+    customer.city,
+    customer.country,
+    customer.billingRecipient,
+    customer.billingStreet,
+    customer.billingHouseNumber,
+    customer.billingPostalCode,
+    customer.billingCity,
+    customer.billingCountry
+  ].filter(Boolean).join(" ");
+}
+
+function getFilteredCustomers(customers) {
+  const search = normalizeSearchValue(els.customerSearchInput.value);
+  const address = normalizeSearchValue(els.customerAddressFilterInput.value);
+  const weekday = els.customerWeekdayFilter.value;
+
+  return (customers || []).filter((customer) => {
+    const searchText = normalizeSearchValue(getCustomerSearchText(customer));
+    const addressText = normalizeSearchValue([
+      customer.street,
+      customer.houseNumber,
+      customer.postalCode,
+      customer.city,
+      customer.country,
+      customer.billingStreet,
+      customer.billingHouseNumber,
+      customer.billingPostalCode,
+      customer.billingCity,
+      customer.billingCountry
+    ].filter(Boolean).join(" "));
+
+    return (!search || searchText.includes(search))
+      && (!address || addressText.includes(address))
+      && (!weekday || Number(customer[weekday]) === 1 || customer[weekday] === true);
+  });
+}
+
+function renderCustomers(customers = latestCustomers) {
   if (!customers || customers.length === 0) {
     els.customerList.innerHTML = '<div class="list-item">Keine Kunden angelegt.</div>';
+    els.customerResultCount.textContent = "0 Kunden";
     return;
   }
 
-  els.customerList.innerHTML = customers.map((customer) => `
+  const filteredCustomers = getFilteredCustomers(customers);
+  els.customerResultCount.textContent = `${filteredCustomers.length} von ${customers.length} Kunden`;
+
+  if (filteredCustomers.length === 0) {
+    els.customerList.innerHTML = '<div class="list-item">Keine Kunden für diesen Filter.</div>';
+    return;
+  }
+
+  els.customerList.innerHTML = filteredCustomers.map((customer) => `
     <div class="user-item clickable-list-item" role="button" tabindex="0" data-edit-customer="${customer.id}" title="Kunde bearbeiten">
       <div>
         <strong>${escapeHtml(customer.name)}</strong>
         <div class="list-meta">
           <span>${escapeHtml(customer.customerNumber)}</span>
-          <span>${escapeHtml(formatAddressLabel(customer.street, customer.houseNumber, customer.postalCode, customer.city) || "Keine Adresse")}</span>
+          <span>${escapeHtml(formatAddressLabel(customer.street, customer.houseNumber, customer.postalCode, customer.city, customer.country) || "Keine Adresse")}</span>
           <span>Wartung: ${escapeHtml(formatMaintenanceWeekdays(customer))}</span>
-          ${Number(customer.billingAddressDiffers) === 1 ? `<span>RE: ${escapeHtml(formatAddressLabel(customer.billingStreet, customer.billingHouseNumber, customer.billingPostalCode, customer.billingCity))}</span>` : ""}
+          ${Number(customer.billingAddressDiffers) === 1 ? `<span>RE: ${escapeHtml(formatAddressLabel(customer.billingStreet, customer.billingHouseNumber, customer.billingPostalCode, customer.billingCity, customer.billingCountry))}</span>` : ""}
           <span>${escapeHtml(customer.contactName || "Kein Ansprechpartner")}</span>
           <span>${escapeHtml(customer.email || "Keine E-Mail")}</span>
           <span>${escapeHtml(customer.phone || "Kein Telefon")}</span>
@@ -892,17 +1031,67 @@ function renderCustomers(customers) {
   `).join("");
 }
 
-function renderProperties(properties) {
+function getPropertyAddressLabel(building) {
+  return formatAddressLabel(building.street, building.houseNumber, building.postalCode, building.city, building.country)
+    || building.address;
+}
+
+function getPropertySearchText(building) {
+  return [
+    building.name,
+    building.customerNumber,
+    building.customerName,
+    building.buildingType,
+    getPropertyAddressLabel(building),
+    ...(building.apartments || []).flatMap((apartment) => [
+      apartment.apartmentNumber,
+      apartment.name,
+      apartment.floor,
+      apartment.customerNumber,
+      apartment.customerName
+    ])
+  ].filter(Boolean).join(" ");
+}
+
+function getFilteredProperties(properties) {
+  const search = normalizeSearchValue(els.propertySearchInput.value);
+  const customerId = els.propertyCustomerFilter.value;
+  const address = normalizeSearchValue(els.propertyAddressFilterInput.value);
+  const buildingType = els.propertyTypeFilter.value;
+
+  return (properties || []).filter((building) => {
+    const searchText = normalizeSearchValue(getPropertySearchText(building));
+    const addressText = normalizeSearchValue(getPropertyAddressLabel(building) || "");
+    const hasCustomer = String(building.customerId || "") === customerId
+      || (building.apartments || []).some((apartment) => String(apartment.customerId || "") === customerId);
+
+    return (!search || searchText.includes(search))
+      && (!customerId || hasCustomer)
+      && (!address || addressText.includes(address))
+      && (!buildingType || building.buildingType === buildingType);
+  });
+}
+
+function renderProperties(properties = latestProperties) {
   latestProperties = properties || [];
   renderApartmentBuildingOptions(properties);
   renderAssetAssignmentOptions(properties);
 
   if (!properties || properties.length === 0) {
     els.propertyList.innerHTML = '<div class="list-item">Keine Gebäude angelegt.</div>';
+    els.propertyResultCount.textContent = "0 Gebäude";
     return;
   }
 
-  els.propertyList.innerHTML = properties.map((building) => `
+  const filteredProperties = getFilteredProperties(properties);
+  els.propertyResultCount.textContent = `${filteredProperties.length} von ${properties.length} Gebäude`;
+
+  if (filteredProperties.length === 0) {
+    els.propertyList.innerHTML = '<div class="list-item">Keine Gebäude oder Appartments für diesen Filter.</div>';
+    return;
+  }
+
+  els.propertyList.innerHTML = filteredProperties.map((building) => `
     <div class="property-card clickable-list-item" role="button" tabindex="0" data-edit-building="${building.id}" title="Gebäude bearbeiten">
       <div class="property-card-header">
         <div>
@@ -910,7 +1099,7 @@ function renderProperties(properties) {
           <div class="list-meta">
             <span>${escapeHtml(formatCustomerLabel(building.customerNumber, building.customerName))}</span>
             <span>${buildingTypeLabels[building.buildingType] || building.buildingType}</span>
-            <span>${escapeHtml(building.address || "Keine Adresse")}</span>
+            <span>${escapeHtml(getPropertyAddressLabel(building) || "Keine Adresse")}</span>
             <span>${building.apartments.length === 0 ? "Als Wartungsobjekt verfügbar" : `${building.apartments.length} Appartments`}</span>
           </div>
         </div>
@@ -996,16 +1185,40 @@ function renderAssetOptions(assets) {
 function renderCustomerOptions(customers) {
   const buildingValue = els.buildingCustomerSelect.value;
   const apartmentValue = els.apartmentCustomerSelect.value;
+  const propertyFilterValue = els.propertyCustomerFilter.value;
   const options = (customers || []).map((customer) => (
     `<option value="${customer.id}">${escapeHtml(formatCustomerLabel(customer.customerNumber, customer.name))}</option>`
   )).join("");
 
   els.buildingCustomerSelect.innerHTML = '<option value="">Kein Kunde zugewiesen</option>' + options;
   els.apartmentCustomerSelect.innerHTML = '<option value="">Wie Gebäude / kein Kunde</option>' + options;
+  els.propertyCustomerFilter.innerHTML = '<option value="">Alle Kunden</option>' + options;
   els.buildingCustomerSelect.value = buildingValue;
   els.apartmentCustomerSelect.value = apartmentValue;
+  els.propertyCustomerFilter.value = propertyFilterValue;
   refreshSearchableSelect(els.buildingCustomerSelect);
   refreshSearchableSelect(els.apartmentCustomerSelect);
+}
+
+function renderEmployeeFunctionOptions(employeeFunctions) {
+  const currentValue = els.employeeFunctionSelect.value;
+  els.employeeFunctionSelect.innerHTML = '<option value="">Keine Funktion</option>' + (employeeFunctions || []).map((employeeFunction) => (
+    `<option value="${employeeFunction.id}">${escapeHtml(employeeFunction.name)}</option>`
+  )).join("");
+  els.employeeFunctionSelect.value = currentValue;
+  refreshSearchableSelect(els.employeeFunctionSelect);
+}
+
+function renderUserRoleOptions(userRoles) {
+  const currentValue = els.userRoleSelect.value || "customer";
+  els.userRoleSelect.innerHTML = (userRoles || []).map((role) => (
+    `<option value="${escapeHtml(role.roleKey)}">${escapeHtml(role.name)}</option>`
+  )).join("");
+  els.userRoleSelect.value = currentValue;
+  if (!els.userRoleSelect.value && els.userRoleSelect.options.length > 0) {
+    els.userRoleSelect.value = els.userRoleSelect.options[0].value;
+  }
+  refreshSearchableSelect(els.userRoleSelect);
 }
 
 function renderApartmentBuildingOptions(properties) {
@@ -1164,12 +1377,14 @@ function getCustomerFormPayload() {
     houseNumber: data.houseNumber,
     postalCode: data.postalCode,
     city: data.city,
+    country: data.country,
     billingAddressDiffers: els.billingAddressDiffersInput.checked,
     billingRecipient: data.billingRecipient,
     billingStreet: data.billingStreet,
     billingHouseNumber: data.billingHouseNumber,
     billingPostalCode: data.billingPostalCode,
     billingCity: data.billingCity,
+    billingCountry: data.billingCountry,
     ...getCustomerMaintenanceWeekdayPayload(),
     notes: data.notes
   };
@@ -1189,6 +1404,7 @@ function syncBillingAddressFields() {
 function resetCustomerForm() {
   els.customerForm.reset();
   els.customerIdInput.value = "";
+  els.customerForm.elements.country.value = "Deutschland";
   applyCustomerMaintenanceWeekdays();
   syncBillingAddressFields();
   els.customerSubmitButton.textContent = "Kunde speichern";
@@ -1206,6 +1422,7 @@ function loadCustomerIntoForm(customer) {
   els.customerForm.elements.houseNumber.value = customer.houseNumber || "";
   els.customerForm.elements.postalCode.value = customer.postalCode || "";
   els.customerForm.elements.city.value = customer.city || "";
+  els.customerForm.elements.country.value = customer.country || "Deutschland";
   els.customerForm.elements.billingAddressDiffers.checked = Number(customer.billingAddressDiffers) === 1;
   syncBillingAddressFields();
   els.customerForm.elements.billingRecipient.value = customer.billingRecipient || "";
@@ -1213,6 +1430,7 @@ function loadCustomerIntoForm(customer) {
   els.customerForm.elements.billingHouseNumber.value = customer.billingHouseNumber || "";
   els.customerForm.elements.billingPostalCode.value = customer.billingPostalCode || "";
   els.customerForm.elements.billingCity.value = customer.billingCity || "";
+  els.customerForm.elements.billingCountry.value = customer.billingCountry || customer.country || "Deutschland";
   applyCustomerMaintenanceWeekdays(customer);
   els.customerForm.elements.notes.value = customer.notes || "";
   els.customerSubmitButton.textContent = "Änderungen speichern";
@@ -1229,7 +1447,7 @@ function getEmployeeFormPayload() {
     lastName: data.lastName,
     email: data.email,
     phone: data.phone,
-    roleTitle: data.roleTitle,
+    functionId: data.functionId ? Number(data.functionId) : null,
     active: els.employeeActiveInput.checked,
     notes: data.notes
   };
@@ -1239,6 +1457,7 @@ function resetEmployeeForm() {
   els.employeeForm.reset();
   els.employeeIdInput.value = "";
   els.employeeActiveInput.checked = true;
+  syncSearchableSelect(els.employeeFunctionSelect);
   els.employeeSubmitButton.textContent = "Mitarbeiter speichern";
 }
 
@@ -1249,12 +1468,42 @@ function loadEmployeeIntoForm(employee) {
   els.employeeForm.elements.lastName.value = employee.lastName || "";
   els.employeeForm.elements.email.value = employee.email || "";
   els.employeeForm.elements.phone.value = employee.phone || "";
-  els.employeeForm.elements.roleTitle.value = employee.roleTitle || "";
+  els.employeeForm.elements.functionId.value = employee.functionId || "";
   els.employeeForm.elements.active.checked = Number(employee.active) === 1;
   els.employeeForm.elements.notes.value = employee.notes || "";
+  syncSearchableSelect(els.employeeFunctionSelect);
   els.employeeSubmitButton.textContent = "Änderungen speichern";
   setView("mitarbeiter", { updateHash: true, scrollTop: false });
   window.setTimeout(() => scrollToTarget("employeeForm"), 0);
+}
+
+function resetEmployeeFunctionForm() {
+  els.employeeFunctionForm.reset();
+  els.employeeFunctionIdInput.value = "";
+  els.employeeFunctionSubmitButton.textContent = "Funktion speichern";
+}
+
+function loadEmployeeFunctionIntoForm(employeeFunction) {
+  els.employeeFunctionForm.elements.employeeFunctionId.value = employeeFunction.id;
+  els.employeeFunctionForm.elements.name.value = employeeFunction.name || "";
+  els.employeeFunctionForm.elements.notes.value = employeeFunction.notes || "";
+  els.employeeFunctionSubmitButton.textContent = "Änderungen speichern";
+  setView("stammdaten", { updateHash: true, scrollTop: false });
+  window.setTimeout(() => scrollToTarget("employeeFunctionForm"), 0);
+}
+
+function resetUserRoleForm() {
+  els.userRoleForm.reset();
+  els.userRoleKeyInput.value = "";
+  els.userRoleSubmitButton.textContent = "Rolle speichern";
+}
+
+function loadUserRoleIntoForm(role) {
+  els.userRoleForm.elements.roleKey.value = role.roleKey || "";
+  els.userRoleForm.elements.name.value = role.name || "";
+  els.userRoleSubmitButton.textContent = "Änderungen speichern";
+  setView("benutzer", { updateHash: true, scrollTop: false });
+  window.setTimeout(() => scrollToTarget("userRoleForm"), 0);
 }
 
 function findApartmentById(id) {
@@ -1271,6 +1520,7 @@ function findApartmentById(id) {
 function resetBuildingForm() {
   els.buildingForm.reset();
   els.buildingIdInput.value = "";
+  els.buildingForm.elements.country.value = "Deutschland";
   syncSearchableSelect(els.buildingCustomerSelect);
   els.buildingSubmitButton.textContent = "Gebäude speichern";
 }
@@ -1280,7 +1530,11 @@ function loadBuildingIntoForm(building) {
   els.buildingForm.elements.customerId.value = building.customerId || "";
   els.buildingForm.elements.name.value = building.name || "";
   els.buildingForm.elements.buildingType.value = building.buildingType || "private_house";
-  els.buildingForm.elements.address.value = building.address || "";
+  els.buildingForm.elements.street.value = building.street || "";
+  els.buildingForm.elements.houseNumber.value = building.houseNumber || "";
+  els.buildingForm.elements.postalCode.value = building.postalCode || "";
+  els.buildingForm.elements.city.value = building.city || "";
+  els.buildingForm.elements.country.value = building.country || "Deutschland";
   syncSearchableSelect(els.buildingCustomerSelect);
   els.buildingSubmitButton.textContent = "Änderungen speichern";
   setView("gebaeude", { updateHash: true, scrollTop: false });
@@ -1441,6 +1695,30 @@ async function deleteEmployee(id) {
   await loadDashboard();
 }
 
+async function deleteEmployeeFunction(id) {
+  if (!window.confirm("Funktion wirklich löschen? Das geht nur, wenn sie keinem Mitarbeiter zugewiesen ist.")) {
+    return;
+  }
+
+  await api(`/api/employee-functions/${id}`, {
+    method: "DELETE"
+  });
+  showToast("Funktion gelöscht.");
+  await loadDashboard();
+}
+
+async function deleteUserRole(roleKey) {
+  if (!window.confirm("Rolle wirklich löschen? Admin und Kunde sind geschützt.")) {
+    return;
+  }
+
+  await api(`/api/user-roles/${encodeURIComponent(roleKey)}`, {
+    method: "DELETE"
+  });
+  showToast("Rolle gelöscht.");
+  await loadDashboard();
+}
+
 async function deleteCustomer(id) {
   if (!window.confirm("Kunde wirklich löschen? Gebäude und Appartments bleiben erhalten, verlieren aber die Kundenzuordnung.")) {
     return;
@@ -1564,6 +1842,28 @@ function bindEvents() {
     renderAssets(latestAssets);
   });
 
+  els.customerSearchInput.addEventListener("input", () => renderCustomers(latestCustomers));
+  els.customerAddressFilterInput.addEventListener("input", () => renderCustomers(latestCustomers));
+  els.customerWeekdayFilter.addEventListener("change", () => renderCustomers(latestCustomers));
+  els.customerFilterResetButton.addEventListener("click", () => {
+    els.customerSearchInput.value = "";
+    els.customerAddressFilterInput.value = "";
+    els.customerWeekdayFilter.value = "";
+    renderCustomers(latestCustomers);
+  });
+
+  els.propertySearchInput.addEventListener("input", () => renderProperties(latestProperties));
+  els.propertyAddressFilterInput.addEventListener("input", () => renderProperties(latestProperties));
+  els.propertyCustomerFilter.addEventListener("change", () => renderProperties(latestProperties));
+  els.propertyTypeFilter.addEventListener("change", () => renderProperties(latestProperties));
+  els.propertyFilterResetButton.addEventListener("click", () => {
+    els.propertySearchInput.value = "";
+    els.propertyAddressFilterInput.value = "";
+    els.propertyCustomerFilter.value = "";
+    els.propertyTypeFilter.value = "";
+    renderProperties(latestProperties);
+  });
+
   els.prevMonthButton.addEventListener("click", () => {
     visibleMonth = addMonths(visibleMonth, -1);
     loadDashboard();
@@ -1602,6 +1902,20 @@ function bindEvents() {
     if (deleteEmployeeButton) {
       event.stopPropagation();
       deleteEmployee(deleteEmployeeButton.dataset.deleteEmployee).catch((error) => showToast(error.message));
+      return;
+    }
+
+    const deleteEmployeeFunctionButton = event.target.closest("[data-delete-employee-function]");
+    if (deleteEmployeeFunctionButton) {
+      event.stopPropagation();
+      deleteEmployeeFunction(deleteEmployeeFunctionButton.dataset.deleteEmployeeFunction).catch((error) => showToast(error.message));
+      return;
+    }
+
+    const deleteUserRoleButton = event.target.closest("[data-delete-user-role]");
+    if (deleteUserRoleButton) {
+      event.stopPropagation();
+      deleteUserRole(deleteUserRoleButton.dataset.deleteUserRole).catch((error) => showToast(error.message));
       return;
     }
 
@@ -1675,6 +1989,24 @@ function bindEvents() {
       return;
     }
 
+    const editEmployeeFunction = event.target.closest("[data-edit-employee-function]");
+    if (editEmployeeFunction) {
+      const employeeFunction = latestEmployeeFunctions.find((item) => String(item.id) === String(editEmployeeFunction.dataset.editEmployeeFunction));
+      if (employeeFunction) {
+        loadEmployeeFunctionIntoForm(employeeFunction);
+      }
+      return;
+    }
+
+    const editUserRole = event.target.closest("[data-edit-user-role]");
+    if (editUserRole) {
+      const role = latestUserRoles.find((item) => item.roleKey === editUserRole.dataset.editUserRole);
+      if (role) {
+        loadUserRoleIntoForm(role);
+      }
+      return;
+    }
+
     const editPlan = event.target.closest("[data-edit-plan]");
     if (editPlan) {
       const plan = latestPlans.find((item) => String(item.id) === String(editPlan.dataset.editPlan));
@@ -1738,6 +2070,26 @@ function bindEvents() {
       const employee = latestEmployees.find((item) => String(item.id) === String(editEmployee.dataset.editEmployee));
       if (employee) {
         loadEmployeeIntoForm(employee);
+      }
+      return;
+    }
+
+    const editEmployeeFunction = event.target.closest("[data-edit-employee-function]");
+    if (editEmployeeFunction) {
+      event.preventDefault();
+      const employeeFunction = latestEmployeeFunctions.find((item) => String(item.id) === String(editEmployeeFunction.dataset.editEmployeeFunction));
+      if (employeeFunction) {
+        loadEmployeeFunctionIntoForm(employeeFunction);
+      }
+      return;
+    }
+
+    const editUserRole = event.target.closest("[data-edit-user-role]");
+    if (editUserRole) {
+      event.preventDefault();
+      const role = latestUserRoles.find((item) => item.roleKey === editUserRole.dataset.editUserRole);
+      if (role) {
+        loadUserRoleIntoForm(role);
       }
       return;
     }
@@ -1866,12 +2218,14 @@ function bindEvents() {
         houseNumber: data.houseNumber,
         postalCode: data.postalCode,
         city: data.city,
+        country: data.country,
         billingAddressDiffers: data.billingAddressDiffers,
         billingRecipient: data.billingRecipient,
         billingStreet: data.billingStreet,
         billingHouseNumber: data.billingHouseNumber,
         billingPostalCode: data.billingPostalCode,
         billingCity: data.billingCity,
+        billingCountry: data.billingCountry,
         maintenanceMonday: data.maintenanceMonday,
         maintenanceTuesday: data.maintenanceTuesday,
         maintenanceWednesday: data.maintenanceWednesday,
@@ -1905,7 +2259,11 @@ function bindEvents() {
       body: JSON.stringify({
         customerId: data.customerId ? Number(data.customerId) : null,
         name: data.name,
-        address: data.address,
+        street: data.street,
+        houseNumber: data.houseNumber,
+        postalCode: data.postalCode,
+        city: data.city,
+        country: data.country,
         buildingType: data.buildingType
       })
     });
@@ -1949,6 +2307,10 @@ function bindEvents() {
 
   els.employeeForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!validateSearchableSelect(els.employeeFunctionSelect, "Bitte eine Funktion aus der Liste auswählen oder das Feld leeren.")) {
+      return;
+    }
+
     const data = getEmployeeFormPayload();
     const isUpdate = Boolean(data.id);
 
@@ -1960,7 +2322,7 @@ function bindEvents() {
         lastName: data.lastName,
         email: data.email,
         phone: data.phone,
-        roleTitle: data.roleTitle,
+        functionId: data.functionId,
         active: data.active,
         notes: data.notes
       })
@@ -1972,6 +2334,26 @@ function bindEvents() {
   });
 
   els.employeeNewButton.addEventListener("click", resetEmployeeForm);
+
+  els.employeeFunctionForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(els.employeeFunctionForm));
+    const isUpdate = Boolean(data.employeeFunctionId);
+
+    await api(isUpdate ? `/api/employee-functions/${data.employeeFunctionId}` : "/api/employee-functions", {
+      method: isUpdate ? "PATCH" : "POST",
+      body: JSON.stringify({
+        name: data.name,
+        notes: data.notes
+      })
+    });
+
+    resetEmployeeFunctionForm();
+    showToast(isUpdate ? "Funktion aktualisiert." : "Funktion angelegt.");
+    await loadDashboard();
+  });
+
+  els.employeeFunctionNewButton.addEventListener("click", resetEmployeeFunctionForm);
 
   els.appSettingsForm.addEventListener("submit", async (event) => {
     event.preventDefault();
@@ -1990,6 +2372,10 @@ function bindEvents() {
 
   els.userForm.addEventListener("submit", async (event) => {
     event.preventDefault();
+    if (!validateSearchableSelect(els.userRoleSelect, "Bitte eine Rolle aus der Liste auswählen.")) {
+      return;
+    }
+
     const data = Object.fromEntries(new FormData(els.userForm));
 
     await api("/api/users", {
@@ -2004,9 +2390,30 @@ function bindEvents() {
     });
 
     els.userForm.reset();
+    els.userRoleSelect.value = "customer";
+    syncSearchableSelect(els.userRoleSelect);
     showToast("Benutzer angelegt.");
     await loadDashboard();
   });
+
+  els.userRoleForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const data = Object.fromEntries(new FormData(els.userRoleForm));
+    const isUpdate = Boolean(data.roleKey);
+
+    await api(isUpdate ? `/api/user-roles/${encodeURIComponent(data.roleKey)}` : "/api/user-roles", {
+      method: isUpdate ? "PATCH" : "POST",
+      body: JSON.stringify({
+        name: data.name
+      })
+    });
+
+    resetUserRoleForm();
+    showToast(isUpdate ? "Rolle aktualisiert." : "Rolle angelegt.");
+    await loadDashboard();
+  });
+
+  els.userRoleNewButton.addEventListener("click", resetUserRoleForm);
 }
 
 initializeSearchableSelects();

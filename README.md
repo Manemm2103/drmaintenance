@@ -39,11 +39,13 @@ Ohne Login wird nur die Anmeldeseite ausgeliefert. Mit dem Haken `Angemeldet ble
 
 ## Stammdaten-Workflow
 
-Der Workflow startet bei einem Kunden. Beim Anlegen vergibt DR Maintenance automatisch die nächste Kundennummer im Format `C0000154`, `C0000155` usw.; die Nummer kann in den Stammdaten geändert werden. Vorname und Name werden getrennt gepflegt, ebenso Straße, Hausnummer, PLZ und Ort. Wenn die Rechnungsadresse abweicht, können RE-Empfänger, RE-Straße, RE-Hausnummer, RE-PLZ und RE-Ort separat erfasst werden. Danach werden Gebäude und Appartments einem Kunden zugewiesen. Wartungsobjekte wie Klimaanlage oder Dampfbad hängen anschließend an einem Gebäude oder Appartment. Wartungspläne werden auf Basis dieser Wartungsobjekte angelegt.
+Der Workflow startet bei einem Kunden. Beim Anlegen vergibt DR Maintenance automatisch die nächste Kundennummer im Format `C0000154`, `C0000155` usw.; die Nummer kann in den Stammdaten geändert werden. Vorname und Name werden getrennt gepflegt, ebenso Straße, Hausnummer, PLZ, Ort und Land. Wenn die Rechnungsadresse abweicht, können RE-Empfänger, RE-Straße, RE-Hausnummer, RE-PLZ, RE-Ort und RE-Land separat erfasst werden. Danach werden Gebäude und Appartments einem Kunden zugewiesen. Gebäude haben ebenfalls getrennte Adressfelder für Straße, Hausnummer, PLZ, Ort und Land. Wartungsobjekte wie Klimaanlage oder Dampfbad hängen anschließend an einem Gebäude oder Appartment. Wartungspläne werden auf Basis dieser Wartungsobjekte angelegt.
 
 Verknüpfte Felder wie Kunde, Gebäude, Objekt-Zuordnung und Wartungsobjekt sind als durchsuchbare Auswahlfelder umgesetzt. Beim Tippen wird die Ergebnisliste live eingeschränkt; gespeichert wird weiterhin die eindeutige interne ID.
 
-Die Wartungsobjektliste kann nach Freitext, Kunde, Straße/Adresse und Kritikalität gefiltert werden. Wartungspläne werden direkt auf ein Wartungsobjekt gelegt, können bearbeitet werden und können einen HTML-Arbeitstext mit Bildern enthalten. Der Kalender zeigt aus einem Wartungsplan nicht nur die nächste Fälligkeit, sondern auch die folgenden rechnerischen Termine im sichtbaren Zeitraum anhand des hinterlegten Intervalls. Wenn Termine auf gesperrte Wochentage, bereits belegte Tage oder direkt benachbarte Wartungstage fallen, werden sie auf den nächsten erlaubten freien Tag verschoben.
+Kunden, Gebäude/Appartments und Wartungsobjekte werden jeweils unter den Formularen gelistet und können gefiltert werden. Wartungspläne werden direkt auf ein Wartungsobjekt gelegt, können bearbeitet werden und können einen HTML-Arbeitstext mit Bildern enthalten. Der Kalender zeigt aus einem Wartungsplan nicht nur die nächste Fälligkeit, sondern auch die folgenden rechnerischen Termine im sichtbaren Zeitraum anhand des hinterlegten Intervalls. Wenn Termine auf gesperrte Wochentage, bereits belegte Tage oder direkt benachbarte Wartungstage fallen, werden sie auf den nächsten erlaubten freien Tag verschoben.
+
+Mitarbeiternummern werden automatisch fortlaufend im Format `M0001`, `M0002` usw. vergeben und können bei Bedarf geändert werden. Mitarbeiterfunktionen werden in den Stammdaten gepflegt und anschließend Mitarbeitern zugewiesen. Benutzerrollen werden im Benutzerbereich gepflegt; die Systemrollen `admin` und `customer`/`Kunde` werden initial angelegt und können nicht gelöscht werden.
 
 ## Container
 
@@ -69,6 +71,10 @@ Die Wartungsobjektliste kann nach Freitext, Kunde, Straße/Adresse und Kritikali
 - `POST /api/employees`
 - `PATCH /api/employees/:id`
 - `DELETE /api/employees/:id`
+- `GET /api/employee-functions`
+- `POST /api/employee-functions`
+- `PATCH /api/employee-functions/:id`
+- `DELETE /api/employee-functions/:id`
 - `GET /api/properties`
 - `POST /api/buildings`
 - `PATCH /api/buildings/:id`
@@ -88,17 +94,21 @@ Die Wartungsobjektliste kann nach Freitext, Kunde, Straße/Adresse und Kritikali
 - `POST /api/users`
 - `PATCH /api/users/:id`
 - `DELETE /api/users/:id`
+- `GET /api/user-roles`
+- `POST /api/user-roles`
+- `PATCH /api/user-roles/:roleKey`
+- `DELETE /api/user-roles/:roleKey`
 - `GET /api/work-orders`
 - `POST /api/work-orders`
 - `PATCH /api/work-orders/:id/status`
 
 ## Versionierung
 
-Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.11.01`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
+Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.11.02`. Der letzte Block ist der Tageszähler und wird bei jeder Änderung am selben Tag um 1 erhöht. Bei einem neuen Datum startet der Zähler wieder bei `01`.
 
 ## Nächste sinnvolle Schritte
 
-- Benutzerlogin und Rollen
+- Berechtigungen je Benutzerrolle
 - Detailseiten für Gebäude, Appartments und Wartungsobjekte
 - wiederkehrende Wartungsaufträge automatisch aus Plänen erzeugen
 - Ersatzteile, Lieferanten und Kosten

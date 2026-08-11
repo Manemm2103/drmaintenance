@@ -125,6 +125,26 @@
               </label>
               <button class="primary-button span-2" type="submit">Stammdaten speichern</button>
             </form>
+            <div class="section-divider">
+              <p class="eyebrow">Mitarbeiter</p>
+              <h3>Funktionen</h3>
+            </div>
+            <form id="employeeFunctionForm" class="form-grid compact-form">
+              <input type="hidden" name="employeeFunctionId" id="employeeFunctionIdInput">
+              <label>
+                Funktion
+                <input name="name" placeholder="z.B. Techniker" required>
+              </label>
+              <label>
+                Notizen
+                <input name="notes" placeholder="optional">
+              </label>
+              <div class="form-actions span-2">
+                <button class="primary-button" type="submit" id="employeeFunctionSubmitButton">Funktion speichern</button>
+                <button class="ghost-button" type="button" id="employeeFunctionNewButton">Neu</button>
+              </div>
+            </form>
+            <div class="user-list" id="employeeFunctionList"></div>
           </article>
           </section>
         </section>
@@ -180,6 +200,10 @@
                 <label>
                   Ort
                   <input name="city" placeholder="z.B. Musterstadt">
+                </label>
+                <label>
+                  Land
+                  <input name="country" placeholder="z.B. Deutschland" value="Deutschland">
                 </label>
                 <div class="weekday-fields span-2" aria-label="Wunsch-Wartungstage">
                   <span>Wunsch-Wartungstage</span>
@@ -237,6 +261,10 @@
                     RE-Ort
                     <input name="billingCity" placeholder="z.B. Rechnungsstadt">
                   </label>
+                  <label>
+                    RE-Land
+                    <input name="billingCountry" placeholder="z.B. Deutschland">
+                  </label>
                 </div>
                 <label class="span-2">
                   Notizen
@@ -247,6 +275,33 @@
                   <button class="ghost-button" type="button" id="customerNewButton">Neu</button>
                 </div>
               </form>
+              <div class="asset-filter-bar" aria-label="Kunden filtern">
+                <label>
+                  Suche
+                  <input id="customerSearchInput" placeholder="Name, Kundennummer, E-Mail, Telefon">
+                </label>
+                <label>
+                  Adresse
+                  <input id="customerAddressFilterInput" placeholder="Straße, PLZ, Ort, Land">
+                </label>
+                <label>
+                  Wartungstag
+                  <select id="customerWeekdayFilter">
+                    <option value="">Alle Wunschtage</option>
+                    <option value="maintenanceMonday">Montag</option>
+                    <option value="maintenanceTuesday">Dienstag</option>
+                    <option value="maintenanceWednesday">Mittwoch</option>
+                    <option value="maintenanceThursday">Donnerstag</option>
+                    <option value="maintenanceFriday">Freitag</option>
+                    <option value="maintenanceSaturday">Samstag</option>
+                    <option value="maintenanceSunday">Sonntag</option>
+                  </select>
+                </label>
+                <div class="filter-actions">
+                  <span id="customerResultCount" class="muted">0 Kunden</span>
+                  <button class="ghost-button" type="button" id="customerFilterResetButton">Filter zurücksetzen</button>
+                </div>
+              </div>
               <div class="user-list" id="customerList"></div>
             </div>
           </article>
@@ -285,9 +340,25 @@
                       <option value="other">Sonstiges</option>
                     </select>
                   </label>
+                  <label>
+                    Straße
+                    <input name="street" placeholder="z.B. Musterstraße">
+                  </label>
+                  <label>
+                    Hausnummer
+                    <input name="houseNumber" placeholder="z.B. 12">
+                  </label>
+                  <label>
+                    PLZ
+                    <input name="postalCode" placeholder="z.B. 12345">
+                  </label>
+                  <label>
+                    Ort
+                    <input name="city" placeholder="z.B. Musterstadt">
+                  </label>
                   <label class="span-2">
-                    Adresse
-                    <input name="address" placeholder="Straße, Ort">
+                    Land
+                    <input name="country" placeholder="z.B. Deutschland" value="Deutschland">
                   </label>
                   <div class="form-actions span-2">
                     <button class="primary-button" type="submit" id="buildingSubmitButton">Gebäude speichern</button>
@@ -326,6 +397,36 @@
                     <button class="ghost-button" type="button" id="apartmentNewButton">Neu</button>
                   </div>
                 </form>
+              </div>
+              <div class="asset-filter-bar" aria-label="Gebäude und Appartments filtern">
+                <label>
+                  Suche
+                  <input id="propertySearchInput" placeholder="Gebäude, Appartment, Nummer, Etage">
+                </label>
+                <label>
+                  Kunde
+                  <select id="propertyCustomerFilter">
+                    <option value="">Alle Kunden</option>
+                  </select>
+                </label>
+                <label>
+                  Adresse
+                  <input id="propertyAddressFilterInput" placeholder="Straße, PLZ, Ort, Land">
+                </label>
+                <label>
+                  Typ
+                  <select id="propertyTypeFilter">
+                    <option value="">Alle Typen</option>
+                    <option value="private_house">Privathaus</option>
+                    <option value="multi_family">Mehrfamilienhaus</option>
+                    <option value="commercial">Gewerbe</option>
+                    <option value="other">Sonstiges</option>
+                  </select>
+                </label>
+                <div class="filter-actions">
+                  <span id="propertyResultCount" class="muted">0 Gebäude</span>
+                  <button class="ghost-button" type="button" id="propertyFilterResetButton">Filter zurücksetzen</button>
+                </div>
               </div>
               <div class="property-list" id="propertyList"></div>
             </div>
@@ -558,7 +659,7 @@
                 <input type="hidden" name="employeeId" id="employeeIdInput">
                 <label>
                   Mitarbeiternummer
-                  <input name="employeeNumber" placeholder="z.B. M0001">
+                  <input name="employeeNumber" placeholder="wird automatisch vergeben">
                 </label>
                 <label>
                   Vorname
@@ -578,7 +679,9 @@
                 </label>
                 <label>
                   Funktion
-                  <input name="roleTitle" placeholder="z.B. Techniker">
+                  <select name="functionId" id="employeeFunctionSelect">
+                    <option value="">Keine Funktion</option>
+                  </select>
                 </label>
                 <label class="check-row span-2">
                   <input name="active" id="employeeActiveInput" type="checkbox" checked>
@@ -622,10 +725,8 @@
                 </label>
                 <label>
                   Rolle
-                  <select name="role">
-                    <option value="technician">Techniker</option>
-                    <option value="manager">Manager</option>
-                    <option value="viewer">Leser</option>
+                  <select name="role" id="userRoleSelect" required>
+                    <option value="customer">Kunde</option>
                     <option value="admin">Admin</option>
                   </select>
                 </label>
@@ -636,6 +737,22 @@
                 <button class="primary-button span-2" type="submit">Benutzer anlegen</button>
               </form>
               <div class="user-list" id="userList"></div>
+              <div class="section-divider">
+                <p class="eyebrow">Login</p>
+                <h3>Rollen</h3>
+              </div>
+              <form id="userRoleForm" class="form-grid compact-form">
+                <input type="hidden" name="roleKey" id="userRoleKeyInput">
+                <label>
+                  Rollenname
+                  <input name="name" placeholder="z.B. Objektverwalter" required>
+                </label>
+                <div class="form-actions">
+                  <button class="primary-button" type="submit" id="userRoleSubmitButton">Rolle speichern</button>
+                  <button class="ghost-button" type="button" id="userRoleNewButton">Neu</button>
+                </div>
+              </form>
+              <div class="user-list" id="userRoleList"></div>
             </div>
           </article>
           </section>

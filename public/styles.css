@@ -788,19 +788,31 @@ textarea {
 
 .users-layout {
   display: grid;
-  grid-template-columns: minmax(320px, 0.8fr) minmax(0, 1fr);
   gap: 18px;
 }
 
 .property-layout {
   display: grid;
-  grid-template-columns: minmax(340px, 0.9fr) minmax(0, 1fr);
   gap: 18px;
 }
 
 .property-forms {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
+}
+
+.section-divider {
+  display: grid;
+  gap: 4px;
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.section-divider h3 {
+  margin: 0;
+  font-size: 1.02rem;
 }
 
 .property-list {
@@ -915,9 +927,7 @@ textarea {
   }
 
   .workspace-grid,
-  .kpi-grid,
-  .users-layout,
-  .property-layout {
+  .kpi-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -948,7 +958,8 @@ textarea {
   .billing-fields,
   .weekday-fields,
   .asset-filter-bar,
-  .users-layout {
+  .users-layout,
+  .property-forms {
     grid-template-columns: 1fr;
   }
 

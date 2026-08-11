@@ -252,6 +252,25 @@ app.delete("/api/employees/:id", asyncRoute(async (req, res) => {
   res.json(await db.deleteEmployee(Number(req.params.id)));
 }));
 
+app.get("/api/employee-functions", asyncRoute(async (_req, res) => {
+  res.json(await db.listEmployeeFunctions());
+}));
+
+app.post("/api/employee-functions", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["name"]);
+  const employeeFunction = await db.createEmployeeFunction(req.body);
+  res.status(201).json(employeeFunction);
+}));
+
+app.patch("/api/employee-functions/:id", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["name"]);
+  res.json(await db.updateEmployeeFunction(Number(req.params.id), req.body));
+}));
+
+app.delete("/api/employee-functions/:id", asyncRoute(async (req, res) => {
+  res.json(await db.deleteEmployeeFunction(Number(req.params.id)));
+}));
+
 app.get("/api/customers", asyncRoute(async (_req, res) => {
   res.json(await db.listCustomers());
 }));
@@ -267,6 +286,25 @@ app.patch("/api/customers/:id", asyncRoute(async (req, res) => {
 
 app.delete("/api/customers/:id", asyncRoute(async (req, res) => {
   res.json(await db.deleteCustomer(Number(req.params.id)));
+}));
+
+app.get("/api/user-roles", asyncRoute(async (_req, res) => {
+  res.json(await db.listUserRoles());
+}));
+
+app.post("/api/user-roles", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["name"]);
+  const userRole = await db.createUserRole(req.body);
+  res.status(201).json(userRole);
+}));
+
+app.patch("/api/user-roles/:roleKey", asyncRoute(async (req, res) => {
+  requireFields(req.body, ["name"]);
+  res.json(await db.updateUserRole(req.params.roleKey, req.body));
+}));
+
+app.delete("/api/user-roles/:roleKey", asyncRoute(async (req, res) => {
+  res.json(await db.deleteUserRole(req.params.roleKey));
 }));
 
 app.get("/api/properties", asyncRoute(async (_req, res) => {
