@@ -668,8 +668,17 @@
                 </select>
               </label>
               <label class="span-2">
-                Objekt-Arbeitstext (HTML)
-                <textarea name="instructionsHtml" rows="6" placeholder="<p>Was ist an diesem Objekt zu tun?</p><img src=&quot;https://...&quot; alt=&quot;Bild&quot;>"></textarea>
+                Objekt-Arbeitstext
+                <textarea name="instructionsHtml" id="assetInstructionsHtmlInput" hidden></textarea>
+                <div
+                  class="html-editor"
+                  id="assetInstructionsEditor"
+                  contenteditable="true"
+                  role="textbox"
+                  aria-label="Objekt-Arbeitstext"
+                  aria-multiline="true"
+                  data-placeholder="Arbeitstext schreiben"
+                ></div>
               </label>
             </form>
             <div class="asset-detail-panel" id="assetDetailPanel" hidden>

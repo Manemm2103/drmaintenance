@@ -81,6 +81,8 @@ const els = {
   maintenanceNewButton: document.querySelector("#maintenanceNewButton"),
   assetForm: document.querySelector("#assetForm"),
   assetIdInput: document.querySelector("#assetIdInput"),
+  assetInstructionsHtmlInput: document.querySelector("#assetInstructionsHtmlInput"),
+  assetInstructionsEditor: document.querySelector("#assetInstructionsEditor"),
   assetSubmitButton: document.querySelector("#assetSubmitButton"),
   assetNewButton: document.querySelector("#assetNewButton"),
   assetDetailPanel: document.querySelector("#assetDetailPanel"),
@@ -1886,7 +1888,111 @@ function loadMaintenancePlanIntoForm(plan) {
   window.setTimeout(() => scrollToTarget("new-maintenance"), 0);
 }
 
+function isEmptyMaintenanceHtml(html) {
+  const template = document.createElement("template");
+  template.innerHTML = String(html || "");
+  return !template.content.querySelector("img")
+    && !template.content.textContent.trim();
+}
+
+function updateAssetInstructionsEditorState() {
+  const isEmpty = isEmptyMaintenanceHtml(els.assetInstructionsEditor.innerHTML);
+  els.assetInstructionsEditor.dataset.empty = isEmpty ? "true" : "false";
+}
+
+function setAssetInstructionsHtml(html) {
+  const sanitizedHtml = sanitizeMaintenanceHtml(html);
+  const value = isEmptyMaintenanceHtml(sanitizedHtml) ? "" : sanitizedHtml;
+  els.assetInstructionsHtmlInput.value = value;
+  els.assetInstructionsEditor.innerHTML = value;
+  updateAssetInstructionsEditorState();
+}
+
+function syncAssetInstructionsEditorToInput() {
+  const sanitizedHtml = sanitizeMaintenanceHtml(els.assetInstructionsEditor.innerHTML);
+  els.assetInstructionsHtmlInput.value = isEmptyMaintenanceHtml(sanitizedHtml) ? "" : sanitizedHtml;
+  updateAssetInstructionsEditorState();
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(reader.result));
+    reader.addEventListener("error", () => reject(new Error("Bild konnte nicht gelesen werden.")));
+    reader.readAsDataURL(file);
+  });
+}
+
+function getEditorInsertionRange(editor) {
+  editor.focus();
+  const selection = window.getSelection();
+  if (selection.rangeCount > 0 && editor.contains(selection.anchorNode)) {
+    return selection.getRangeAt(0);
+  }
+
+  const range = document.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(false);
+  return range;
+}
+
+function placeCaretInside(element) {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  range.collapse(true);
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(range);
+}
+
+function insertAssetInstructionImage(dataUrl, altText = "Eingefügtes Bild") {
+  const figure = document.createElement("figure");
+  const image = document.createElement("img");
+  image.src = dataUrl;
+  image.alt = altText || "Eingefügtes Bild";
+  figure.append(image);
+
+  const nextParagraph = document.createElement("p");
+  nextParagraph.append(document.createElement("br"));
+
+  const fragment = document.createDocumentFragment();
+  fragment.append(figure, nextParagraph);
+
+  const range = getEditorInsertionRange(els.assetInstructionsEditor);
+  range.deleteContents();
+  range.insertNode(fragment);
+  placeCaretInside(nextParagraph);
+  syncAssetInstructionsEditorToInput();
+}
+
+async function handleAssetInstructionsPaste(event) {
+  const clipboard = event.clipboardData;
+  const itemFiles = Array.from(clipboard?.items || [])
+    .filter((item) => item.kind === "file" && item.type.startsWith("image/"))
+    .map((item) => item.getAsFile())
+    .filter(Boolean);
+  const files = itemFiles.length > 0
+    ? itemFiles
+    : Array.from(clipboard?.files || []).filter((file) => file.type.startsWith("image/"));
+
+  if (files.length === 0) {
+    return;
+  }
+
+  event.preventDefault();
+  for (const file of files) {
+    if (!/^image\/(png|jpe?g|gif|webp)$/i.test(file.type)) {
+      showToast("Dieses Bildformat wird im Arbeitstext nicht unterstützt.");
+      continue;
+    }
+
+    const dataUrl = await readFileAsDataUrl(file);
+    insertAssetInstructionImage(dataUrl, file.name || "Eingefügtes Bild");
+  }
+}
+
 function getAssetFormPayload() {
+  syncAssetInstructionsEditorToInput();
   const data = Object.fromEntries(new FormData(els.assetForm));
   return {
     id: data.assetId ? Number(data.assetId) : null,
@@ -1904,6 +2010,7 @@ function getAssetFormPayload() {
 function resetAssetForm() {
   els.assetForm.reset();
   els.assetIdInput.value = "";
+  setAssetInstructionsHtml("");
   syncSearchableSelect(els.assetPropertyTargetSelect);
   els.assetSubmitButton.textContent = "Objekt speichern";
   els.assetDetailPanel.hidden = true;
@@ -1921,7 +2028,7 @@ function loadAssetIntoForm(asset) {
   els.assetForm.elements.serialNumber.value = asset.serialNumber || "";
   els.assetForm.elements.qrCode.value = asset.qrCode || "";
   els.assetForm.elements.criticality.value = asset.criticality || "medium";
-  els.assetForm.elements.instructionsHtml.value = asset.instructionsHtml || "";
+  setAssetInstructionsHtml(asset.instructionsHtml || "");
   els.assetForm.elements.propertyTarget.value = asset.assignmentType && asset.assignmentId
     ? `${asset.assignmentType}:${asset.assignmentId}`
     : "";
@@ -2575,6 +2682,13 @@ function bindEvents() {
     els.assetCustomerFilter.value = "";
     els.assetCriticalityFilter.value = "";
     renderAssets(latestAssets);
+  });
+  els.assetInstructionsEditor.addEventListener("input", syncAssetInstructionsEditorToInput);
+  els.assetInstructionsEditor.addEventListener("paste", (event) => {
+    handleAssetInstructionsPaste(event).catch((error) => showToast(error.message));
+  });
+  els.assetInstructionsEditor.addEventListener("blur", () => {
+    setAssetInstructionsHtml(els.assetInstructionsEditor.innerHTML);
   });
 
   els.planSearchInput.addEventListener("input", () => renderPlans(latestPlans));
@@ -3325,6 +3439,7 @@ function bindEvents() {
 }
 
 populateCountrySelects();
+setAssetInstructionsHtml("");
 initializeSearchableSelects();
 syncBillingAddressFields();
 bindEvents();

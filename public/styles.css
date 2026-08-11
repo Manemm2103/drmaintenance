@@ -619,6 +619,54 @@ textarea:focus {
   border-color: #050505;
 }
 
+.html-editor {
+  width: 100%;
+  min-height: 180px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #ffffff;
+  color: var(--text);
+  padding: 12px;
+  outline: none;
+}
+
+.html-editor:focus {
+  border-color: #050505;
+}
+
+.html-editor[data-empty="true"]::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.html-editor p:first-child,
+.html-editor ul:first-child,
+.html-editor ol:first-child,
+.html-editor figure:first-child {
+  margin-top: 0;
+}
+
+.html-editor p:last-child,
+.html-editor ul:last-child,
+.html-editor ol:last-child,
+.html-editor figure:last-child {
+  margin-bottom: 0;
+}
+
+.html-editor img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 8px 0;
+  border-radius: 6px;
+}
+
+.html-editor figure {
+  margin: 10px 0;
+}
+
 .native-search-select {
   display: none;
 }
