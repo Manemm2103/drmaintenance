@@ -1,4 +1,4 @@
-const APP_VERSION = "2026.08.11.20";
+const APP_VERSION = "2026.08.23.01";
 
 module.exports = {
   APP_VERSION

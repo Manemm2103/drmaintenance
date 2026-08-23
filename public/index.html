@@ -23,8 +23,6 @@
           <a href="#kalender" data-view-link="dashboard" data-nav-key="kalender" data-scroll-target="kalender">Kalender</a>
           <a href="#auftraege" data-view-link="auftraege">Aufträge</a>
           <a href="#kunden" data-view-link="kunden">Kunden</a>
-          <a href="#gebaeude" data-view-link="gebaeude">Gebäude</a>
-          <a href="#appartments" data-view-link="appartments">Wohnungen</a>
           <a href="#wartungsobjekte" data-view-link="wartungsobjekte">Objekte</a>
           <a href="#planung" data-view-link="planung">Wartungspläne</a>
           <a href="#mitarbeiter" data-view-link="mitarbeiter">Mitarbeiter</a>
@@ -124,13 +122,37 @@
                 <input name="skipSundaysForMaintenance" id="skipSundaysForMaintenanceInput" type="checkbox">
                 Sonntag nicht als Arbeitstag im Wartungsplan berücksichtigen
               </label>
+              <label class="check-row span-2">
+                <input name="caldavEnabled" id="caldavEnabledInput" type="checkbox">
+                CalDAV-Sync aktivieren
+              </label>
+              <label class="span-2">
+                CalDAV Kalender-URL
+                <input name="caldavCalendarUrl" id="caldavCalendarUrlInput" placeholder="https://example.com/remote.php/dav/calendars/user/wartung/">
+              </label>
+              <label>
+                CalDAV Benutzername
+                <input name="caldavUsername" id="caldavUsernameInput" autocomplete="username">
+              </label>
+              <label>
+                CalDAV Passwort
+                <input name="caldavPassword" id="caldavPasswordInput" type="password" autocomplete="new-password" placeholder="leer lassen = unverändert">
+              </label>
+              <label>
+                Sync-Intervall in Minuten
+                <input name="caldavSyncIntervalMinutes" id="caldavSyncIntervalMinutesInput" type="number" min="1" value="60">
+              </label>
+              <div class="caldav-status span-2">
+                <span id="caldavLastSyncStatus">Noch nicht synchronisiert.</span>
+                <button class="ghost-button" type="button" id="caldavSyncNowButton">Jetzt synchronisieren</button>
+              </div>
               <button class="primary-button span-2" type="submit">Stammdaten speichern</button>
             </form>
-            <div class="section-divider">
+            <div class="section-divider" hidden>
               <p class="eyebrow">Gebäude</p>
               <h3>Typen</h3>
             </div>
-            <form id="buildingTypeForm" class="form-grid compact-form">
+            <form id="buildingTypeForm" class="form-grid compact-form" hidden>
               <input type="hidden" name="typeKey" id="buildingTypeKeyInput">
               <label>
                 Gebäudetyp
@@ -141,7 +163,7 @@
                 <button class="ghost-button" type="button" id="buildingTypeNewButton">Neu</button>
               </div>
             </form>
-            <div class="user-list" id="buildingTypeList"></div>
+            <div class="user-list" id="buildingTypeList" hidden></div>
             <div class="section-divider">
               <p class="eyebrow">Mitarbeiter</p>
               <h3>Funktionen</h3>
@@ -374,7 +396,7 @@
           </section>
         </section>
 
-        <section class="view" data-view="gebaeude">
+        <section class="view" data-view="gebaeude" hidden>
           <section class="workspace-grid single-view-grid">
           <article class="panel wide" id="gebaeude">
             <div class="panel-header">
@@ -461,7 +483,7 @@
           </section>
         </section>
 
-        <section class="view" data-view="appartments">
+        <section class="view" data-view="appartments" hidden>
           <section class="workspace-grid single-view-grid">
           <article class="panel wide" id="appartments">
             <div class="panel-header">
@@ -633,9 +655,9 @@
             <form id="assetForm" class="form-grid compact-form">
               <input type="hidden" name="assetId" id="assetIdInput">
               <label class="span-2">
-                Zuordnung
-                <select name="propertyTarget" id="assetPropertyTargetSelect">
-                  <option value="">Noch nicht zugewiesen</option>
+                Kunde
+                <select name="customerId" id="assetCustomerSelect" required>
+                  <option value="">Kunde auswählen</option>
                 </select>
               </label>
               <label>
@@ -657,6 +679,14 @@
               <label>
                 QR-Code
                 <input name="qrCode" placeholder="z.B. DRH-QR-001">
+              </label>
+              <label>
+                Intervall in Tagen
+                <input name="maintenanceIntervalDays" type="number" min="1" value="60" required>
+              </label>
+              <label>
+                Nächste Wartung
+                <input name="nextDueOn" type="date" required>
               </label>
               <label class="span-2">
                 Kritikalität
@@ -712,7 +742,7 @@
               </label>
               <label>
                 Straße / Adresse
-                <input id="assetAddressFilterInput" placeholder="Straße, PLZ, Ort, Gebäude">
+                <input id="assetAddressFilterInput" placeholder="Straße, PLZ, Ort, Standort">
               </label>
               <label>
                 Kritikalität
@@ -786,7 +816,7 @@
             <div class="asset-filter-bar" aria-label="Wartungspläne filtern">
               <label>
                 Suche
-                <input id="planSearchInput" placeholder="Objekt, Gebäude, Kunde, Arbeitstext">
+                <input id="planSearchInput" placeholder="Objekt, Kunde, Arbeitstext">
               </label>
               <label>
                 Mitarbeiter

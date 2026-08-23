@@ -149,6 +149,7 @@ async function runMigrations() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS assets (
       id INT AUTO_INCREMENT PRIMARY KEY,
+      customer_id INT NULL,
       building_id INT NULL,
       apartment_id INT NULL,
       name VARCHAR(160) NOT NULL,
@@ -158,8 +159,11 @@ async function runMigrations() {
       qr_code VARCHAR(120) NULL,
       criticality ENUM('low', 'medium', 'high', 'critical') NOT NULL DEFAULT 'medium',
       instructions_html MEDIUMTEXT NULL,
+      maintenance_interval_days INT NULL,
+      next_due_on DATE NULL,
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+      INDEX idx_assets_customer (customer_id),
       INDEX idx_assets_building (building_id),
       INDEX idx_assets_apartment (apartment_id),
       INDEX idx_assets_location (location),
@@ -234,13 +238,25 @@ async function runMigrations() {
   await pool.query("ALTER TABLE apartments ADD COLUMN IF NOT EXISTS customer_id INT NULL AFTER building_id");
   await pool.query("ALTER TABLE apartments ADD INDEX IF NOT EXISTS idx_apartments_customer (customer_id)");
   await pool.query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS building_id INT NULL AFTER id");
+  await pool.query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS customer_id INT NULL AFTER id");
   await pool.query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS apartment_id INT NULL AFTER building_id");
   await pool.query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS qr_code VARCHAR(120) NULL AFTER serial_number");
   await pool.query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS instructions_html MEDIUMTEXT NULL AFTER criticality");
+  await pool.query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS maintenance_interval_days INT NULL AFTER instructions_html");
+  await pool.query("ALTER TABLE assets ADD COLUMN IF NOT EXISTS next_due_on DATE NULL AFTER maintenance_interval_days");
+  await pool.query("ALTER TABLE assets ADD INDEX IF NOT EXISTS idx_assets_customer (customer_id)");
   await pool.query("ALTER TABLE assets ADD INDEX IF NOT EXISTS idx_assets_building (building_id)");
   await pool.query("ALTER TABLE assets ADD INDEX IF NOT EXISTS idx_assets_apartment (apartment_id)");
   await pool.query("ALTER TABLE assets ADD UNIQUE INDEX IF NOT EXISTS uq_assets_qr_code (qr_code)");
-
+  await pool.query(`
+    UPDATE assets a
+    LEFT JOIN buildings asset_building ON asset_building.id = a.building_id
+    LEFT JOIN apartments asset_apartment ON asset_apartment.id = a.apartment_id
+    LEFT JOIN buildings apartment_building ON apartment_building.id = asset_apartment.building_id
+    SET a.customer_id = COALESCE(asset_apartment.customer_id, apartment_building.customer_id, asset_building.customer_id)
+    WHERE a.customer_id IS NULL
+      AND COALESCE(asset_apartment.customer_id, apartment_building.customer_id, asset_building.customer_id) IS NOT NULL
+  `);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS employee_functions (
       id INT AUTO_INCREMENT PRIMARY KEY,
@@ -306,6 +322,23 @@ async function runMigrations() {
   await pool.query("ALTER TABLE maintenance_plans ADD INDEX IF NOT EXISTS idx_plans_target (target_type, target_id)");
   await pool.query("ALTER TABLE maintenance_plans ADD INDEX IF NOT EXISTS idx_plans_employee (employee_id)");
   await pool.query("UPDATE maintenance_plans SET target_type = 'asset', target_id = asset_id WHERE target_type IS NULL AND asset_id IS NOT NULL");
+  await pool.query(`
+    UPDATE assets a
+    INNER JOIN (
+      SELECT
+        COALESCE(target_id, asset_id) AS assetId,
+        MIN(interval_days) AS intervalDays,
+        MIN(next_due_on) AS nextDueOn
+      FROM maintenance_plans
+      WHERE active = TRUE
+        AND COALESCE(target_type, 'asset') = 'asset'
+        AND COALESCE(target_id, asset_id) IS NOT NULL
+      GROUP BY COALESCE(target_id, asset_id)
+    ) plan_seed ON plan_seed.assetId = a.id
+    SET
+      a.maintenance_interval_days = COALESCE(a.maintenance_interval_days, plan_seed.intervalDays),
+      a.next_due_on = COALESCE(a.next_due_on, plan_seed.nextDueOn)
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS asset_checks (
@@ -421,10 +454,11 @@ async function runMigrations() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS app_settings (
       setting_key VARCHAR(80) PRIMARY KEY,
-      setting_value VARCHAR(255) NOT NULL,
+      setting_value TEXT NOT NULL,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await pool.query("ALTER TABLE app_settings MODIFY COLUMN setting_value TEXT NOT NULL");
 
   await pool.execute(
     "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)",
@@ -443,6 +477,22 @@ async function runMigrations() {
     "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)",
     ["skip_sundays_for_maintenance", weekendDefault]
   );
+  const defaultSettings = [
+    ["caldav_enabled", "0"],
+    ["caldav_calendar_url", ""],
+    ["caldav_username", ""],
+    ["caldav_password", ""],
+    ["caldav_sync_interval_minutes", "60"],
+    ["caldav_last_sync_at", ""],
+    ["caldav_last_sync_status", "Noch nicht synchronisiert."]
+  ];
+
+  for (const [settingKey, settingValue] of defaultSettings) {
+    await pool.execute(
+      "INSERT IGNORE INTO app_settings (setting_key, setting_value) VALUES (?, ?)",
+      [settingKey, settingValue]
+    );
+  }
 
   await seedUserRoles();
   await seedEmployeeFunctions();
@@ -830,7 +880,7 @@ async function getDashboardSummary() {
   const [[summary]] = await pool.query(`
     SELECT
       (SELECT COUNT(*) FROM assets) AS assetCount,
-      (SELECT COUNT(*) FROM maintenance_plans WHERE active = TRUE) AS activePlanCount,
+      (SELECT COUNT(*) FROM maintenance_plans WHERE active = TRUE AND COALESCE(target_type, 'asset') = 'asset') AS activePlanCount,
       (SELECT COUNT(*) FROM work_orders WHERE status <> 'done') AS openWorkOrderCount,
       (SELECT COUNT(*) FROM work_orders WHERE status <> 'done' AND due_date < CURDATE()) AS overdueCount,
       (SELECT COUNT(*) FROM customers) AS customerCount,
@@ -891,6 +941,7 @@ async function getDashboardSummary() {
     LEFT JOIN buildings apartment_building ON apartment_building.id = apartment.building_id
     LEFT JOIN employees employee ON employee.id = mp.employee_id
     WHERE mp.active = TRUE
+      AND COALESCE(mp.target_type, 'asset') = 'asset'
     ORDER BY mp.next_due_on ASC
   `);
   const visiblePlans = await Promise.all(plans.map(async (plan) => {
@@ -914,6 +965,7 @@ async function getDashboardSummary() {
   const [assets] = await pool.query(`
     SELECT
       a.id,
+      a.customer_id AS directCustomerId,
       a.building_id AS buildingId,
       a.apartment_id AS apartmentId,
       CASE
@@ -932,22 +984,25 @@ async function getDashboardSummary() {
         WHEN a.building_id IS NOT NULL THEN asset_building.address
         ELSE NULL
       END AS buildingAddress,
-      COALESCE(apartment_customer.id, inherited_customer.id, building_customer.id) AS customerId,
-      COALESCE(apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number) AS customerNumber,
-      COALESCE(apartment_customer.name, inherited_customer.name, building_customer.name) AS customerName,
-      COALESCE(apartment_customer.street, inherited_customer.street, building_customer.street) AS customerStreet,
-      COALESCE(apartment_customer.house_number, inherited_customer.house_number, building_customer.house_number) AS customerHouseNumber,
-      COALESCE(apartment_customer.postal_code, inherited_customer.postal_code, building_customer.postal_code) AS customerPostalCode,
-      COALESCE(apartment_customer.city, inherited_customer.city, building_customer.city) AS customerCity,
-      COALESCE(apartment_customer.country, inherited_customer.country, building_customer.country) AS customerCountry,
+      COALESCE(direct_customer.id, apartment_customer.id, inherited_customer.id, building_customer.id) AS customerId,
+      COALESCE(direct_customer.customer_number, apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number) AS customerNumber,
+      COALESCE(direct_customer.name, apartment_customer.name, inherited_customer.name, building_customer.name) AS customerName,
+      COALESCE(direct_customer.street, apartment_customer.street, inherited_customer.street, building_customer.street) AS customerStreet,
+      COALESCE(direct_customer.house_number, apartment_customer.house_number, inherited_customer.house_number, building_customer.house_number) AS customerHouseNumber,
+      COALESCE(direct_customer.postal_code, apartment_customer.postal_code, inherited_customer.postal_code, building_customer.postal_code) AS customerPostalCode,
+      COALESCE(direct_customer.city, apartment_customer.city, inherited_customer.city, building_customer.city) AS customerCity,
+      COALESCE(direct_customer.country, apartment_customer.country, inherited_customer.country, building_customer.country) AS customerCountry,
       a.name,
       a.asset_type AS assetType,
       a.location,
       a.serial_number AS serialNumber,
       a.qr_code AS qrCode,
       a.instructions_html AS instructionsHtml,
-      a.criticality
+      a.criticality,
+      a.maintenance_interval_days AS maintenanceIntervalDays,
+      DATE_FORMAT(a.next_due_on, '%Y-%m-%d') AS nextDueOn
     FROM assets a
+    LEFT JOIN customers direct_customer ON direct_customer.id = a.customer_id
     LEFT JOIN buildings asset_building ON asset_building.id = a.building_id
     LEFT JOIN apartments asset_apartment ON asset_apartment.id = a.apartment_id
     LEFT JOIN buildings apartment_building ON apartment_building.id = asset_apartment.building_id
@@ -1032,11 +1087,19 @@ async function getAppSettings() {
   const skipSundaysForMaintenance = settings.skip_sundays_for_maintenance === undefined
     ? legacyWeekendSetting
     : settingToBoolean(settings.skip_sundays_for_maintenance);
+  const caldavSyncIntervalMinutes = Math.max(Number(settings.caldav_sync_interval_minutes || 60), 1);
 
   return {
     skipSaturdaysForMaintenance,
     skipSundaysForMaintenance,
-    skipWeekendsForMaintenance: skipSaturdaysForMaintenance && skipSundaysForMaintenance
+    skipWeekendsForMaintenance: skipSaturdaysForMaintenance && skipSundaysForMaintenance,
+    caldavEnabled: settingToBoolean(settings.caldav_enabled),
+    caldavCalendarUrl: settings.caldav_calendar_url || "",
+    caldavUsername: settings.caldav_username || "",
+    caldavPasswordSet: Boolean(settings.caldav_password),
+    caldavSyncIntervalMinutes,
+    caldavLastSyncAt: settings.caldav_last_sync_at || "",
+    caldavLastSyncStatus: settings.caldav_last_sync_status || "Noch nicht synchronisiert."
   };
 }
 
@@ -1050,12 +1113,24 @@ async function updateAppSettings(input) {
     ? (legacyWeekendInput === undefined ? currentSettings.skipSundaysForMaintenance : parseBoolean(legacyWeekendInput))
     : parseBoolean(input.skipSundaysForMaintenance);
   const skipWeekendsForMaintenance = skipSaturdaysForMaintenance && skipSundaysForMaintenance;
+  const parsedCaldavSyncIntervalMinutes = Number(input.caldavSyncIntervalMinutes);
+  const caldavSyncIntervalMinutes = Number.isFinite(parsedCaldavSyncIntervalMinutes) && parsedCaldavSyncIntervalMinutes > 0
+    ? Math.round(parsedCaldavSyncIntervalMinutes)
+    : currentSettings.caldavSyncIntervalMinutes;
 
   const settingsToSave = [
     ["skip_saturdays_for_maintenance", skipSaturdaysForMaintenance],
     ["skip_sundays_for_maintenance", skipSundaysForMaintenance],
-    ["skip_weekends_for_maintenance", skipWeekendsForMaintenance]
+    ["skip_weekends_for_maintenance", skipWeekendsForMaintenance],
+    ["caldav_enabled", parseBoolean(input.caldavEnabled)],
+    ["caldav_calendar_url", normalizeText(input.caldavCalendarUrl) || ""],
+    ["caldav_username", normalizeText(input.caldavUsername) || ""],
+    ["caldav_sync_interval_minutes", String(caldavSyncIntervalMinutes)]
   ];
+
+  if (input.caldavPassword) {
+    settingsToSave.push(["caldav_password", String(input.caldavPassword)]);
+  }
 
   for (const [settingKey, settingValue] of settingsToSave) {
     await pool.execute(
@@ -1074,6 +1149,37 @@ async function updateAppSettings(input) {
   );
 
   return getAppSettings();
+}
+
+async function updateCaldavSyncStatus(status) {
+  const settingsToSave = [
+    ["caldav_last_sync_at", new Date().toISOString()],
+    ["caldav_last_sync_status", normalizeText(status) || "Synchronisation abgeschlossen."]
+  ];
+
+  for (const [settingKey, settingValue] of settingsToSave) {
+    await pool.execute(
+      `
+        INSERT INTO app_settings (setting_key, setting_value)
+        VALUES (?, ?)
+        ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value)
+      `,
+      [settingKey, settingValue]
+    );
+  }
+}
+
+async function getCaldavCredentials() {
+  const [rows] = await pool.query("SELECT setting_key AS settingKey, setting_value AS settingValue FROM app_settings WHERE setting_key LIKE 'caldav_%'");
+  const settings = Object.fromEntries(rows.map((row) => [row.settingKey, row.settingValue]));
+
+  return {
+    enabled: settingToBoolean(settings.caldav_enabled),
+    calendarUrl: settings.caldav_calendar_url || "",
+    username: settings.caldav_username || "",
+    password: settings.caldav_password || "",
+    syncIntervalMinutes: Math.max(Number(settings.caldav_sync_interval_minutes || 60), 1)
+  };
 }
 
 async function authenticateUser(username, password) {
@@ -2798,9 +2904,10 @@ async function listMaintenanceTargets() {
           WHEN a.building_id IS NOT NULL THEN asset_building.name
           ELSE a.location
         END,
-        COALESCE(apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number)
+        COALESCE(direct_customer.customer_number, apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number)
       ) AS subtitle
     FROM assets a
+    LEFT JOIN customers direct_customer ON direct_customer.id = a.customer_id
     LEFT JOIN buildings asset_building ON asset_building.id = a.building_id
     LEFT JOIN apartments asset_apartment ON asset_apartment.id = a.apartment_id
     LEFT JOIN buildings apartment_building ON apartment_building.id = asset_apartment.building_id
@@ -2915,6 +3022,10 @@ async function createMaintenancePlan(input) {
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('maintenance_plan', ?, ?)",
     [result.insertId, `Wartungsplan "${plan.title}" angelegt.`]
   );
+  await pool.execute(
+    "UPDATE assets SET maintenance_interval_days = ?, next_due_on = ? WHERE id = ?",
+    [plan.intervalDays, plan.nextDueOn, plan.targetId]
+  );
 
   return getMaintenancePlanById(result.insertId);
 }
@@ -2956,6 +3067,10 @@ async function updateMaintenancePlan(id, input) {
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('maintenance_plan', ?, ?)",
     [id, `Wartungsplan "${plan.title}" aktualisiert.`]
+  );
+  await pool.execute(
+    "UPDATE assets SET maintenance_interval_days = ?, next_due_on = ? WHERE id = ?",
+    [plan.intervalDays, plan.nextDueOn, plan.targetId]
   );
 
   return getMaintenancePlanById(id);
@@ -3054,10 +3169,11 @@ async function getCustomerMaintenanceWeekdaysForTarget(targetType, targetId) {
       SELECT
         ${getCustomerMaintenanceWeekdaySelect("c")}
       FROM assets a
+      LEFT JOIN customers direct_customer ON direct_customer.id = a.customer_id
       LEFT JOIN buildings b ON b.id = a.building_id
       LEFT JOIN apartments ap ON ap.id = a.apartment_id
       LEFT JOIN buildings apb ON apb.id = ap.building_id
-      LEFT JOIN customers c ON c.id = COALESCE(ap.customer_id, apb.customer_id, b.customer_id)
+      LEFT JOIN customers c ON c.id = COALESCE(direct_customer.id, ap.customer_id, apb.customer_id, b.customer_id)
       WHERE a.id = ?
     `;
   } else if (targetType === "building") {
@@ -3182,6 +3298,7 @@ async function getCalendarEvents(startDate, endDate) {
       LEFT JOIN buildings apartment_building ON apartment_building.id = apartment.building_id
       LEFT JOIN employees employee ON employee.id = mp.employee_id
       WHERE mp.active = TRUE
+        AND COALESCE(mp.target_type, 'asset') = 'asset'
         AND mp.next_due_on <= ?
       ORDER BY mp.next_due_on ASC, mp.title ASC
     `,
@@ -3289,6 +3406,7 @@ async function listAssets() {
   const [rows] = await pool.query(`
     SELECT
       a.id,
+      a.customer_id AS directCustomerId,
       a.building_id AS buildingId,
       a.apartment_id AS apartmentId,
       CASE
@@ -3307,22 +3425,25 @@ async function listAssets() {
         WHEN a.building_id IS NOT NULL THEN asset_building.address
         ELSE NULL
       END AS buildingAddress,
-      COALESCE(apartment_customer.id, inherited_customer.id, building_customer.id) AS customerId,
-      COALESCE(apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number) AS customerNumber,
-      COALESCE(apartment_customer.name, inherited_customer.name, building_customer.name) AS customerName,
-      COALESCE(apartment_customer.street, inherited_customer.street, building_customer.street) AS customerStreet,
-      COALESCE(apartment_customer.house_number, inherited_customer.house_number, building_customer.house_number) AS customerHouseNumber,
-      COALESCE(apartment_customer.postal_code, inherited_customer.postal_code, building_customer.postal_code) AS customerPostalCode,
-      COALESCE(apartment_customer.city, inherited_customer.city, building_customer.city) AS customerCity,
-      COALESCE(apartment_customer.country, inherited_customer.country, building_customer.country) AS customerCountry,
+      COALESCE(direct_customer.id, apartment_customer.id, inherited_customer.id, building_customer.id) AS customerId,
+      COALESCE(direct_customer.customer_number, apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number) AS customerNumber,
+      COALESCE(direct_customer.name, apartment_customer.name, inherited_customer.name, building_customer.name) AS customerName,
+      COALESCE(direct_customer.street, apartment_customer.street, inherited_customer.street, building_customer.street) AS customerStreet,
+      COALESCE(direct_customer.house_number, apartment_customer.house_number, inherited_customer.house_number, building_customer.house_number) AS customerHouseNumber,
+      COALESCE(direct_customer.postal_code, apartment_customer.postal_code, inherited_customer.postal_code, building_customer.postal_code) AS customerPostalCode,
+      COALESCE(direct_customer.city, apartment_customer.city, inherited_customer.city, building_customer.city) AS customerCity,
+      COALESCE(direct_customer.country, apartment_customer.country, inherited_customer.country, building_customer.country) AS customerCountry,
       a.name,
       a.asset_type AS assetType,
       a.location,
       a.serial_number AS serialNumber,
       a.qr_code AS qrCode,
       a.instructions_html AS instructionsHtml,
-      a.criticality
+      a.criticality,
+      a.maintenance_interval_days AS maintenanceIntervalDays,
+      DATE_FORMAT(a.next_due_on, '%Y-%m-%d') AS nextDueOn
     FROM assets a
+    LEFT JOIN customers direct_customer ON direct_customer.id = a.customer_id
     LEFT JOIN buildings asset_building ON asset_building.id = a.building_id
     LEFT JOIN apartments asset_apartment ON asset_apartment.id = a.apartment_id
     LEFT JOIN buildings apartment_building ON apartment_building.id = asset_apartment.building_id
@@ -3334,43 +3455,6 @@ async function listAssets() {
   return rows;
 }
 
-function parseAssetAssignment(input) {
-  const rawTarget = input.propertyTarget || (
-    input.assignmentType && input.assignmentId
-      ? `${input.assignmentType}:${input.assignmentId}`
-      : ""
-  );
-
-  if (!rawTarget) {
-    return {
-      buildingId: null,
-      apartmentId: null
-    };
-  }
-
-  const [targetType, targetIdText] = String(rawTarget).split(":");
-  const targetId = Number(targetIdText);
-  if (!targetId) {
-    throw createError("Ungültige Objektzuweisung.", 400);
-  }
-
-  if (targetType === "building") {
-    return {
-      buildingId: targetId,
-      apartmentId: null
-    };
-  }
-
-  if (targetType === "apartment") {
-    return {
-      buildingId: null,
-      apartmentId: targetId
-    };
-  }
-
-  throw createError("Ungültige Objektzuweisung.", 400);
-}
-
 function normalizeAssetInput(input) {
   const name = input.name?.trim();
   const assetType = input.assetType?.trim();
@@ -3379,26 +3463,36 @@ function normalizeAssetInput(input) {
   const qrCode = input.qrCode?.trim() || null;
   const instructionsHtml = normalizeText(input.instructionsHtml);
   const criticality = input.criticality || "medium";
-  const assignment = parseAssetAssignment(input);
+  const customerId = Number(input.customerId);
+  const maintenanceIntervalDays = Number(input.maintenanceIntervalDays || input.intervalDays);
+  const nextDueOn = normalizeText(input.nextDueOn);
   const allowedCriticalities = new Set(["low", "medium", "high", "critical"]);
 
-  if (!name || !assetType || !location) {
-    throw createError("Name, Typ und Standort sind Pflichtfelder.", 400);
+  if (!customerId || !name || !assetType || !location || !maintenanceIntervalDays || !nextDueOn) {
+    throw createError("Kunde, Name, Typ, Standort, Intervall und nächste Fälligkeit sind Pflichtfelder.", 400);
   }
 
   if (!allowedCriticalities.has(criticality)) {
     throw createError("Ungültige Kritikalität.", 400);
   }
 
+  if (maintenanceIntervalDays < 1) {
+    throw createError("Das Intervall muss mindestens 1 Tag betragen.", 400);
+  }
+
   return {
-    ...assignment,
+    customerId,
+    buildingId: null,
+    apartmentId: null,
     name,
     assetType,
     location,
     serialNumber,
     qrCode,
     instructionsHtml,
-    criticality
+    criticality,
+    maintenanceIntervalDays,
+    nextDueOn
   };
 }
 
@@ -3411,30 +3505,23 @@ function handleDuplicateAsset(error) {
 }
 
 async function assertAssetAssignment(asset) {
-  if (asset.buildingId) {
-    const [[building]] = await pool.execute(
-      `
-        SELECT
-          b.id,
-          (SELECT COUNT(*) FROM apartments a WHERE a.building_id = b.id) AS apartmentCount
-        FROM buildings b
-        WHERE b.id = ?
-      `,
-      [asset.buildingId]
-    );
-    if (!building) {
-      throw createError("Das ausgewählte Gebäude existiert nicht.", 400);
-    }
-    if (building.apartmentCount > 0) {
-      throw createError("Gebäude mit Appartments können nicht direkt als Zuordnung genutzt werden. Bitte ein Appartment auswählen.", 400);
-    }
+  const [[customer]] = await pool.execute("SELECT id FROM customers WHERE id = ?", [asset.customerId]);
+  if (!customer) {
+    throw createError("Der ausgewählte Kunde existiert nicht.", 400);
   }
 
-  if (asset.apartmentId) {
-    const [[apartment]] = await pool.execute("SELECT id FROM apartments WHERE id = ?", [asset.apartmentId]);
-    if (!apartment) {
-      throw createError("Das ausgewählte Appartment existiert nicht.", 400);
-    }
+  const [[customerWeekdays]] = await pool.execute(
+    `
+      SELECT
+        ${getCustomerMaintenanceWeekdaySelect("c")}
+      FROM customers c
+      WHERE c.id = ?
+    `,
+    [asset.customerId]
+  );
+  const settings = await getAppSettings();
+  if (!hasAnyAllowedMaintenanceWeekday(settings, getCustomerMaintenanceWeekdaysFromRow(customerWeekdays))) {
+    throw createError("Für diesen Kunden bleibt mit den Stammdaten kein erlaubter Wartungstag übrig.", 400);
   }
 }
 
@@ -3516,6 +3603,83 @@ async function createAssetChecksFromLabels(assetId, labels, assetName) {
   return insertedLabels;
 }
 
+async function syncAssetMaintenancePlan(assetId) {
+  const asset = await getAssetById(assetId);
+  if (!asset || !asset.maintenanceIntervalDays || !asset.nextDueOn) {
+    return null;
+  }
+
+  const settings = await getAppSettings();
+  const customerWeekdays = await getCustomerMaintenanceWeekdaysForTarget("asset", assetId);
+  if (!hasAnyAllowedMaintenanceWeekday(settings, customerWeekdays)) {
+    throw createError("Für diesen Kunden bleibt mit den Stammdaten kein erlaubter Wartungstag übrig.", 400);
+  }
+
+  const nextDueOn = adjustDateKeyForWeekend(asset.nextDueOn, settings, customerWeekdays);
+  const [[existingPlan]] = await pool.execute(
+    `
+      SELECT id
+      FROM maintenance_plans
+      WHERE COALESCE(target_type, 'asset') = 'asset'
+        AND COALESCE(target_id, asset_id) = ?
+      ORDER BY active DESC, id ASC
+      LIMIT 1
+    `,
+    [assetId]
+  );
+
+  if (existingPlan) {
+    await pool.execute(
+      `
+        UPDATE maintenance_plans
+        SET
+          asset_id = ?,
+          target_type = 'asset',
+          target_id = ?,
+          title = ?,
+          instructions_html = ?,
+          interval_days = ?,
+          next_due_on = ?,
+          active = TRUE
+        WHERE id = ?
+      `,
+      [
+        assetId,
+        assetId,
+        asset.name,
+        asset.instructionsHtml,
+        asset.maintenanceIntervalDays,
+        nextDueOn,
+        existingPlan.id
+      ]
+    );
+    return getMaintenancePlanById(existingPlan.id);
+  }
+
+  const [result] = await pool.execute(
+    `
+      INSERT INTO maintenance_plans (asset_id, target_type, target_id, employee_id, title, instructions_html, interval_days, next_due_on)
+      VALUES (?, 'asset', ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      assetId,
+      assetId,
+      null,
+      asset.name,
+      asset.instructionsHtml,
+      asset.maintenanceIntervalDays,
+      nextDueOn
+    ]
+  );
+
+  await pool.execute(
+    "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('maintenance_plan', ?, ?)",
+    [result.insertId, `Wartungsplan für "${asset.name}" automatisch angelegt.`]
+  );
+
+  return getMaintenancePlanById(result.insertId);
+}
+
 async function createAsset(input) {
   const asset = normalizeAssetInput(input);
   await assertAssetAssignment(asset);
@@ -3525,10 +3689,11 @@ async function createAsset(input) {
   try {
     [result] = await pool.execute(
       `
-        INSERT INTO assets (building_id, apartment_id, name, asset_type, location, serial_number, qr_code, criticality, instructions_html)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO assets (customer_id, building_id, apartment_id, name, asset_type, location, serial_number, qr_code, criticality, instructions_html, maintenance_interval_days, next_due_on)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       [
+        asset.customerId,
         asset.buildingId,
         asset.apartmentId,
         asset.name,
@@ -3537,7 +3702,9 @@ async function createAsset(input) {
         asset.serialNumber,
         asset.qrCode,
         asset.criticality,
-        asset.instructionsHtml
+        asset.instructionsHtml,
+        asset.maintenanceIntervalDays,
+        asset.nextDueOn
       ]
     );
   } catch (error) {
@@ -3549,6 +3716,7 @@ async function createAsset(input) {
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
     [result.insertId, `Wartungsobjekt "${asset.name}" angelegt.`]
   );
+  await syncAssetMaintenancePlan(result.insertId);
 
   return getAssetById(result.insertId);
 }
@@ -3558,6 +3726,7 @@ async function getAssetById(id) {
     `
       SELECT
         a.id,
+        a.customer_id AS directCustomerId,
         a.building_id AS buildingId,
         a.apartment_id AS apartmentId,
         CASE
@@ -3576,22 +3745,25 @@ async function getAssetById(id) {
           WHEN a.building_id IS NOT NULL THEN asset_building.address
           ELSE NULL
         END AS buildingAddress,
-        COALESCE(apartment_customer.id, inherited_customer.id, building_customer.id) AS customerId,
-        COALESCE(apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number) AS customerNumber,
-        COALESCE(apartment_customer.name, inherited_customer.name, building_customer.name) AS customerName,
-        COALESCE(apartment_customer.street, inherited_customer.street, building_customer.street) AS customerStreet,
-        COALESCE(apartment_customer.house_number, inherited_customer.house_number, building_customer.house_number) AS customerHouseNumber,
-        COALESCE(apartment_customer.postal_code, inherited_customer.postal_code, building_customer.postal_code) AS customerPostalCode,
-        COALESCE(apartment_customer.city, inherited_customer.city, building_customer.city) AS customerCity,
-        COALESCE(apartment_customer.country, inherited_customer.country, building_customer.country) AS customerCountry,
+        COALESCE(direct_customer.id, apartment_customer.id, inherited_customer.id, building_customer.id) AS customerId,
+        COALESCE(direct_customer.customer_number, apartment_customer.customer_number, inherited_customer.customer_number, building_customer.customer_number) AS customerNumber,
+        COALESCE(direct_customer.name, apartment_customer.name, inherited_customer.name, building_customer.name) AS customerName,
+        COALESCE(direct_customer.street, apartment_customer.street, inherited_customer.street, building_customer.street) AS customerStreet,
+        COALESCE(direct_customer.house_number, apartment_customer.house_number, inherited_customer.house_number, building_customer.house_number) AS customerHouseNumber,
+        COALESCE(direct_customer.postal_code, apartment_customer.postal_code, inherited_customer.postal_code, building_customer.postal_code) AS customerPostalCode,
+        COALESCE(direct_customer.city, apartment_customer.city, inherited_customer.city, building_customer.city) AS customerCity,
+        COALESCE(direct_customer.country, apartment_customer.country, inherited_customer.country, building_customer.country) AS customerCountry,
         a.name,
         a.asset_type AS assetType,
         a.location,
         a.serial_number AS serialNumber,
         a.qr_code AS qrCode,
         a.instructions_html AS instructionsHtml,
-        a.criticality
+        a.criticality,
+        a.maintenance_interval_days AS maintenanceIntervalDays,
+        DATE_FORMAT(a.next_due_on, '%Y-%m-%d') AS nextDueOn
       FROM assets a
+      LEFT JOIN customers direct_customer ON direct_customer.id = a.customer_id
       LEFT JOIN buildings asset_building ON asset_building.id = a.building_id
       LEFT JOIN apartments asset_apartment ON asset_apartment.id = a.apartment_id
       LEFT JOIN buildings apartment_building ON apartment_building.id = asset_apartment.building_id
@@ -3619,10 +3791,11 @@ async function updateAsset(id, input) {
     await pool.execute(
       `
         UPDATE assets
-        SET building_id = ?, apartment_id = ?, name = ?, asset_type = ?, location = ?, serial_number = ?, qr_code = ?, criticality = ?, instructions_html = ?
+        SET customer_id = ?, building_id = ?, apartment_id = ?, name = ?, asset_type = ?, location = ?, serial_number = ?, qr_code = ?, criticality = ?, instructions_html = ?, maintenance_interval_days = ?, next_due_on = ?
         WHERE id = ?
       `,
       [
+        asset.customerId,
         asset.buildingId,
         asset.apartmentId,
         asset.name,
@@ -3632,6 +3805,8 @@ async function updateAsset(id, input) {
         asset.qrCode,
         asset.criticality,
         asset.instructionsHtml,
+        asset.maintenanceIntervalDays,
+        asset.nextDueOn,
         id
       ]
     );
@@ -3644,6 +3819,7 @@ async function updateAsset(id, input) {
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
     [id, `Wartungsobjekt "${asset.name}" aktualisiert.`]
   );
+  await syncAssetMaintenancePlan(id);
 
   return getAssetById(id);
 }
@@ -4047,6 +4223,8 @@ module.exports = {
   getDashboardSummary,
   getAppSettings,
   updateAppSettings,
+  updateCaldavSyncStatus,
+  getCaldavCredentials,
   authenticateUser,
   createSession,
   getUserBySessionToken,

@@ -1,6 +1,7 @@
 const path = require("path");
 const express = require("express");
 const db = require("./db");
+const caldav = require("./caldav");
 const { APP_VERSION } = require("./version");
 
 const app = express();
@@ -213,7 +214,14 @@ app.get("/api/settings", asyncRoute(async (_req, res) => {
 }));
 
 app.patch("/api/settings", asyncRoute(async (req, res) => {
-  res.json(await db.updateAppSettings(req.body));
+  const settings = await db.updateAppSettings(req.body);
+  await caldav.refreshSchedule();
+  res.json(settings);
+}));
+
+app.post("/api/caldav/sync", asyncRoute(async (_req, res) => {
+  await caldav.syncNow();
+  res.json(await db.getAppSettings());
 }));
 
 app.get("/api/users", asyncRoute(async (_req, res) => {
@@ -397,13 +405,13 @@ app.get("/api/assets/:id/details", asyncRoute(async (req, res) => {
 }));
 
 app.post("/api/assets", asyncRoute(async (req, res) => {
-  requireFields(req.body, ["name", "assetType", "location"]);
+  requireFields(req.body, ["customerId", "name", "assetType", "location", "maintenanceIntervalDays", "nextDueOn"]);
   const asset = await db.createAsset(req.body);
   res.status(201).json(asset);
 }));
 
 app.patch("/api/assets/:id", asyncRoute(async (req, res) => {
-  requireFields(req.body, ["name", "assetType", "location"]);
+  requireFields(req.body, ["customerId", "name", "assetType", "location", "maintenanceIntervalDays", "nextDueOn"]);
   res.json(await db.updateAsset(Number(req.params.id), req.body));
 }));
 
@@ -462,6 +470,7 @@ app.use((err, _req, res, _next) => {
 async function bootstrap() {
   await db.waitForDatabase();
   await db.runMigrations();
+  await caldav.refreshSchedule();
 
   app.listen(port, () => {
     console.log(`DR Maintenance listens on port ${port}`);

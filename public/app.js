@@ -61,7 +61,7 @@ const els = {
   apartmentCustomerFilter: document.querySelector("#apartmentCustomerFilter"),
   apartmentFilterResetButton: document.querySelector("#apartmentFilterResetButton"),
   apartmentResultCount: document.querySelector("#apartmentResultCount"),
-  assetPropertyTargetSelect: document.querySelector("#assetPropertyTargetSelect"),
+  assetCustomerSelect: document.querySelector("#assetCustomerSelect"),
   buildingTypeSelect: document.querySelector("#buildingTypeSelect"),
   apartmentBuildingSelect: document.querySelector("#apartmentBuildingSelect"),
   buildingCustomerSelect: document.querySelector("#buildingCustomerSelect"),
@@ -119,6 +119,13 @@ const els = {
   appSettingsForm: document.querySelector("#appSettingsForm"),
   skipSaturdaysForMaintenanceInput: document.querySelector("#skipSaturdaysForMaintenanceInput"),
   skipSundaysForMaintenanceInput: document.querySelector("#skipSundaysForMaintenanceInput"),
+  caldavEnabledInput: document.querySelector("#caldavEnabledInput"),
+  caldavCalendarUrlInput: document.querySelector("#caldavCalendarUrlInput"),
+  caldavUsernameInput: document.querySelector("#caldavUsernameInput"),
+  caldavPasswordInput: document.querySelector("#caldavPasswordInput"),
+  caldavSyncIntervalMinutesInput: document.querySelector("#caldavSyncIntervalMinutesInput"),
+  caldavLastSyncStatus: document.querySelector("#caldavLastSyncStatus"),
+  caldavSyncNowButton: document.querySelector("#caldavSyncNowButton"),
   userForm: document.querySelector("#userForm"),
   userRoleForm: document.querySelector("#userRoleForm"),
   userRoleKeyInput: document.querySelector("#userRoleKeyInput"),
@@ -426,22 +433,6 @@ const viewConfig = {
     actionView: "wartungsobjekte",
     scrollTarget: "assetForm"
   },
-  gebaeude: {
-    eyebrow: "Gebäude",
-    title: "Gebäude verwalten.",
-    actionLabel: "Gebäude",
-    actionTitle: "Neues Gebäude erfassen",
-    actionView: "gebaeude",
-    scrollTarget: "buildingForm"
-  },
-  appartments: {
-    eyebrow: "Wohnungen",
-    title: "Wohnungen und Appartments verwalten.",
-    actionLabel: "Wohnung",
-    actionTitle: "Neue Wohnung erfassen",
-    actionView: "appartments",
-    scrollTarget: "apartmentForm"
-  },
   planung: {
     eyebrow: "Planung",
     title: "Wartungspläne verwalten.",
@@ -467,9 +458,6 @@ const hashViewMap = {
   stammdaten: "stammdaten",
   kunden: "kunden",
   wartungsobjekte: "wartungsobjekte",
-  gebaeude: "gebaeude",
-  appartments: "appartments",
-  wohnungen: "appartments",
   planung: "planung",
   "new-maintenance": "planung",
   mitarbeiter: "mitarbeiter",
@@ -689,7 +677,7 @@ function initializeSearchableSelects() {
   [
     ...els.countrySelects,
     els.assetCustomerFilter,
-    els.assetPropertyTargetSelect,
+    els.assetCustomerSelect,
     els.apartmentBuildingSelect,
     els.buildingCustomerSelect,
     els.apartmentCustomerSelect,
@@ -971,6 +959,16 @@ function renderSummary(payload) {
 function renderAppSettings(settings) {
   els.skipSaturdaysForMaintenanceInput.checked = Boolean(settings?.skipSaturdaysForMaintenance);
   els.skipSundaysForMaintenanceInput.checked = Boolean(settings?.skipSundaysForMaintenance);
+  els.caldavEnabledInput.checked = Boolean(settings?.caldavEnabled);
+  els.caldavCalendarUrlInput.value = settings?.caldavCalendarUrl || "";
+  els.caldavUsernameInput.value = settings?.caldavUsername || "";
+  els.caldavPasswordInput.value = "";
+  els.caldavPasswordInput.placeholder = settings?.caldavPasswordSet ? "Gespeichert - leer lassen = unverändert" : "Passwort";
+  els.caldavSyncIntervalMinutesInput.value = settings?.caldavSyncIntervalMinutes || 60;
+  const lastSyncText = settings?.caldavLastSyncAt
+    ? `${settings.caldavLastSyncStatus} (${formatDate(settings.caldavLastSyncAt)})`
+    : (settings?.caldavLastSyncStatus || "Noch nicht synchronisiert.");
+  els.caldavLastSyncStatus.textContent = lastSyncText;
 }
 
 function renderWorkOrders(workOrders) {
@@ -1066,7 +1064,9 @@ function getAssetSearchText(asset) {
     asset.customerHouseNumber,
     asset.customerPostalCode,
     asset.customerCity,
-    asset.customerCountry
+    asset.customerCountry,
+    asset.maintenanceIntervalDays,
+    asset.nextDueOn
   ].filter(Boolean).join(" ");
 }
 
@@ -1128,6 +1128,8 @@ function renderAssets(assets = latestAssets) {
           <span>${escapeHtml(formatCustomerLabel(asset.customerNumber, asset.customerName))}</span>
           <span>${escapeHtml(asset.assetType)}</span>
           <span>${escapeHtml(asset.location)}</span>
+          <span>alle ${Number(asset.maintenanceIntervalDays || 0)} Tage</span>
+          <span>nächste Wartung: ${formatDate(asset.nextDueOn)}</span>
           <span>${priorityLabels[asset.criticality] || asset.criticality}</span>
           ${asset.serialNumber ? `<span>${escapeHtml(asset.serialNumber)}</span>` : ""}
           ${asset.qrCode ? `<span>QR: ${escapeHtml(asset.qrCode)}</span>` : ""}
@@ -1590,7 +1592,6 @@ function getFilteredApartments(apartments) {
 function renderProperties(properties = latestProperties) {
   latestProperties = properties || [];
   renderApartmentBuildingOptions(properties);
-  renderAssetAssignmentOptions(properties);
   renderApartments(properties);
 
   if (!properties || properties.length === 0) {
@@ -1718,6 +1719,7 @@ function groupEventsByDate(events) {
 }
 
 function renderCustomerOptions(customers) {
+  const assetValue = els.assetCustomerSelect.value;
   const buildingValue = els.buildingCustomerSelect.value;
   const apartmentValue = els.apartmentCustomerSelect.value;
   const propertyFilterValue = els.propertyCustomerFilter.value;
@@ -1726,14 +1728,17 @@ function renderCustomerOptions(customers) {
     `<option value="${customer.id}">${escapeHtml(formatCustomerLabel(customer.customerNumber, customer.name))}</option>`
   )).join("");
 
+  els.assetCustomerSelect.innerHTML = '<option value="">Kunde auswählen</option>' + options;
   els.buildingCustomerSelect.innerHTML = '<option value="">Kein Kunde zugewiesen</option>' + options;
   els.apartmentCustomerSelect.innerHTML = '<option value="">Wie Gebäude / kein Kunde</option>' + options;
   els.propertyCustomerFilter.innerHTML = '<option value="">Alle Kunden</option>' + options;
   els.apartmentCustomerFilter.innerHTML = '<option value="">Alle Kunden</option>' + options;
+  els.assetCustomerSelect.value = assetValue;
   els.buildingCustomerSelect.value = buildingValue;
   els.apartmentCustomerSelect.value = apartmentValue;
   els.propertyCustomerFilter.value = propertyFilterValue;
   els.apartmentCustomerFilter.value = apartmentFilterValue;
+  refreshSearchableSelect(els.assetCustomerSelect);
   refreshSearchableSelect(els.buildingCustomerSelect);
   refreshSearchableSelect(els.apartmentCustomerSelect);
 }
@@ -1791,57 +1796,6 @@ function renderApartmentBuildingOptions(properties) {
   els.apartmentBuildingSelect.value = currentValue;
   els.apartmentBuildingFilter.value = filterValue;
   refreshSearchableSelect(els.apartmentBuildingSelect);
-}
-
-function formatAssignmentCustomerLabel(customerNumber, customerName) {
-  const customerLabel = formatCustomerLabel(customerNumber, customerName);
-  return customerLabel === "Kein Kunde" ? "" : customerLabel;
-}
-
-function formatBuildingAssignmentLabel(building) {
-  return [
-    formatAssignmentCustomerLabel(building.customerNumber, building.customerName),
-    building.name,
-    "Gebäude ohne Appartment",
-    getPropertyAddressLabel(building)
-  ].filter(Boolean).join(" | ");
-}
-
-function formatApartmentAssignmentLabel(building, apartment) {
-  const apartmentLabel = [
-    apartment.apartmentNumber ? `Appartment ${apartment.apartmentNumber}` : "Appartment",
-    apartment.name
-  ].filter(Boolean).join(" - ");
-
-  return [
-    formatAssignmentCustomerLabel(apartment.customerNumber || building.customerNumber, apartment.customerName || building.customerName),
-    building.name,
-    apartmentLabel,
-    getPropertyAddressLabel(building)
-  ].filter(Boolean).join(" | ");
-}
-
-function renderAssetAssignmentOptions(properties) {
-  const currentValue = els.assetPropertyTargetSelect.value;
-  const options = [];
-
-  for (const building of properties || []) {
-    if (building.apartments?.length > 0) {
-      for (const apartment of building.apartments) {
-        options.push(
-          `<option value="apartment:${apartment.id}">${escapeHtml(formatApartmentAssignmentLabel(building, apartment))}</option>`
-        );
-      }
-    } else {
-      options.push(
-        `<option value="building:${building.id}">${escapeHtml(formatBuildingAssignmentLabel(building))}</option>`
-      );
-    }
-  }
-
-  els.assetPropertyTargetSelect.innerHTML = '<option value="">Noch nicht zugewiesen</option>' + options.join("");
-  els.assetPropertyTargetSelect.value = currentValue;
-  refreshSearchableSelect(els.assetPropertyTargetSelect);
 }
 
 function renderMaintenanceTargetOptions(targets) {
@@ -2008,7 +1962,9 @@ function getAssetFormPayload() {
     qrCode: data.qrCode,
     instructionsHtml: data.instructionsHtml,
     criticality: data.criticality,
-    propertyTarget: data.propertyTarget,
+    customerId: data.customerId ? Number(data.customerId) : null,
+    maintenanceIntervalDays: Number(data.maintenanceIntervalDays),
+    nextDueOn: data.nextDueOn,
     checkLabels: [...draftAssetCheckLabels]
   };
 }
@@ -2016,9 +1972,11 @@ function getAssetFormPayload() {
 function resetAssetForm() {
   els.assetForm.reset();
   els.assetIdInput.value = "";
+  els.assetForm.elements.maintenanceIntervalDays.value = 60;
+  els.assetForm.elements.nextDueOn.value = toDateKey(new Date());
   setAssetInstructionsHtml("");
   resetDraftAssetChecks();
-  syncSearchableSelect(els.assetPropertyTargetSelect);
+  syncSearchableSelect(els.assetCustomerSelect);
   els.assetSubmitButton.textContent = "Objekt speichern";
 }
 
@@ -2030,12 +1988,12 @@ function loadAssetIntoForm(asset) {
   els.assetForm.elements.serialNumber.value = asset.serialNumber || "";
   els.assetForm.elements.qrCode.value = asset.qrCode || "";
   els.assetForm.elements.criticality.value = asset.criticality || "medium";
+  els.assetForm.elements.customerId.value = asset.customerId || "";
+  els.assetForm.elements.maintenanceIntervalDays.value = asset.maintenanceIntervalDays || 60;
+  els.assetForm.elements.nextDueOn.value = asset.nextDueOn || "";
   setAssetInstructionsHtml(asset.instructionsHtml || "");
   resetDraftAssetChecks();
-  els.assetForm.elements.propertyTarget.value = asset.assignmentType && asset.assignmentId
-    ? `${asset.assignmentType}:${asset.assignmentId}`
-    : "";
-  syncSearchableSelect(els.assetPropertyTargetSelect);
+  syncSearchableSelect(els.assetCustomerSelect);
   els.assetSubmitButton.textContent = "Änderungen speichern";
   setView("wartungsobjekte", { updateHash: true, scrollTop: false });
   window.setTimeout(() => scrollToTarget("assetForm"), 0);
@@ -3127,7 +3085,7 @@ function bindEvents() {
 
   els.assetForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (!validateSearchableSelect(els.assetPropertyTargetSelect, "Bitte eine Zuordnung aus der Liste auswählen oder das Feld leeren.")) {
+    if (!validateSearchableSelect(els.assetCustomerSelect, "Bitte einen Kunden aus der Liste auswählen.")) {
       return;
     }
 
@@ -3144,7 +3102,9 @@ function bindEvents() {
         qrCode: data.qrCode,
         criticality: data.criticality,
         instructionsHtml: data.instructionsHtml,
-        propertyTarget: data.propertyTarget,
+        customerId: data.customerId,
+        maintenanceIntervalDays: data.maintenanceIntervalDays,
+        nextDueOn: data.nextDueOn,
         checkLabels: data.checkLabels
       })
     });
@@ -3352,12 +3312,25 @@ function bindEvents() {
       method: "PATCH",
       body: JSON.stringify({
         skipSaturdaysForMaintenance: els.skipSaturdaysForMaintenanceInput.checked,
-        skipSundaysForMaintenance: els.skipSundaysForMaintenanceInput.checked
+        skipSundaysForMaintenance: els.skipSundaysForMaintenanceInput.checked,
+        caldavEnabled: els.caldavEnabledInput.checked,
+        caldavCalendarUrl: els.caldavCalendarUrlInput.value,
+        caldavUsername: els.caldavUsernameInput.value,
+        caldavPassword: els.caldavPasswordInput.value,
+        caldavSyncIntervalMinutes: Number(els.caldavSyncIntervalMinutesInput.value)
       })
     });
 
     showToast("Stammdaten gespeichert.");
     await loadDashboard();
+  });
+
+  els.caldavSyncNowButton.addEventListener("click", async () => {
+    const settings = await api("/api/caldav/sync", {
+      method: "POST"
+    });
+    renderAppSettings(settings);
+    showToast("CalDAV-Sync ausgeführt.");
   });
 
   els.userForm.addEventListener("submit", async (event) => {
