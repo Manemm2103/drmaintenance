@@ -363,6 +363,33 @@
                   <button class="ghost-button" type="button" id="customerNewButton">Neu</button>
                 </div>
               </form>
+              <div class="customer-overview" id="customerOverviewPanel" hidden>
+                <div class="section-divider">
+                  <div>
+                    <p class="eyebrow">Kundenübersicht</p>
+                    <h3 id="customerOverviewTitle">Kunde</h3>
+                  </div>
+                  <span id="customerOverviewSummary" class="muted">Keine Daten geladen.</span>
+                </div>
+                <div class="customer-overview-grid">
+                  <div>
+                    <h3>Wartungsobjekte</h3>
+                    <div class="overview-list" id="customerOverviewAssetList"></div>
+                  </div>
+                  <div>
+                    <h3>Anstehende Wartungen</h3>
+                    <div class="overview-list" id="customerOverviewPlanList"></div>
+                  </div>
+                  <div>
+                    <h3>Offene Aufträge</h3>
+                    <div class="overview-list" id="customerOverviewOpenOrderList"></div>
+                  </div>
+                  <div>
+                    <h3>Abgeschlossene Wartungen</h3>
+                    <div class="overview-list" id="customerOverviewDoneOrderList"></div>
+                  </div>
+                </div>
+              </div>
               <div class="asset-filter-bar" aria-label="Kunden filtern">
                 <label>
                   Suche

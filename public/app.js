@@ -43,6 +43,13 @@ const els = {
   customerWeekdayFilter: document.querySelector("#customerWeekdayFilter"),
   customerFilterResetButton: document.querySelector("#customerFilterResetButton"),
   customerResultCount: document.querySelector("#customerResultCount"),
+  customerOverviewPanel: document.querySelector("#customerOverviewPanel"),
+  customerOverviewTitle: document.querySelector("#customerOverviewTitle"),
+  customerOverviewSummary: document.querySelector("#customerOverviewSummary"),
+  customerOverviewAssetList: document.querySelector("#customerOverviewAssetList"),
+  customerOverviewPlanList: document.querySelector("#customerOverviewPlanList"),
+  customerOverviewOpenOrderList: document.querySelector("#customerOverviewOpenOrderList"),
+  customerOverviewDoneOrderList: document.querySelector("#customerOverviewDoneOrderList"),
   employeeList: document.querySelector("#employeeList"),
   employeeFunctionList: document.querySelector("#employeeFunctionList"),
   buildingTypeList: document.querySelector("#buildingTypeList"),
@@ -1509,6 +1516,86 @@ function renderCustomers(customers = latestCustomers) {
   `).join("");
 }
 
+function renderOverviewList(element, items, emptyText, renderItem) {
+  if (!items || items.length === 0) {
+    element.innerHTML = `<div class="list-item">${emptyText}</div>`;
+    return;
+  }
+
+  element.innerHTML = items.map(renderItem).join("");
+}
+
+function renderCustomerOverview(overview) {
+  const assets = overview.assets || [];
+  const plans = overview.maintenancePlans || [];
+  const workOrders = overview.workOrders || [];
+  const openOrders = workOrders.filter((order) => order.status !== "done");
+  const doneOrders = workOrders.filter((order) => order.status === "done");
+
+  els.customerOverviewPanel.hidden = false;
+  els.customerOverviewTitle.textContent = formatCustomerLabel(overview.customer.customerNumber, overview.customer.name);
+  els.customerOverviewSummary.textContent = `${assets.length} Objekte · ${plans.length} anstehend · ${openOrders.length} offen · ${doneOrders.length} abgeschlossen`;
+
+  renderOverviewList(els.customerOverviewAssetList, assets, "Keine Wartungsobjekte für diesen Kunden.", (asset) => `
+    <div class="list-item clickable-list-item" role="button" tabindex="0" data-edit-asset="${asset.id}" title="Wartungsobjekt öffnen">
+      <strong>${escapeHtml(asset.name)}</strong>
+      <div class="list-meta">
+        <span>${escapeHtml(asset.assetType || "Kein Typ")}</span>
+        <span>${escapeHtml(asset.location || "Kein Standort")}</span>
+        <span>alle ${Number(asset.maintenanceIntervalDays || 0)} Tage</span>
+        <span>nächste Wartung: ${formatDate(asset.nextDueOn)}</span>
+        <span>${Number(asset.checkCount || 0)} Checks</span>
+      </div>
+    </div>
+  `);
+
+  renderOverviewList(els.customerOverviewPlanList, plans, "Keine anstehenden Wartungen.", (plan) => `
+    <div class="list-item clickable-list-item" role="button" tabindex="0" data-edit-plan="${plan.id}" title="Wartungsplan öffnen">
+      <strong>${escapeHtml(plan.assetName || plan.title || "Wartung")}</strong>
+      <div class="list-meta">
+        <span>${formatDate(plan.nextDueOn)}</span>
+        <span>alle ${Number(plan.intervalDays || 0)} Tage</span>
+        <span>${escapeHtml(plan.employeeName || "Kein Mitarbeiter")}</span>
+      </div>
+    </div>
+  `);
+
+  renderOverviewList(els.customerOverviewOpenOrderList, openOrders, "Keine offenen Aufträge.", (order) => `
+    <div class="list-item clickable-list-item" role="button" tabindex="0" data-open-work-order="${order.id}" title="Auftrag öffnen">
+      <strong>${escapeHtml(order.title)}</strong>
+      <div class="list-meta">
+        <span>${escapeHtml(order.assetName || "Ohne Objekt")}</span>
+        <span>${formatDate(order.dueDate)}</span>
+        <span>${statusLabels[order.status] || order.status}</span>
+        <span>${priorityLabels[order.priority] || order.priority}</span>
+        <span>${Number(order.checkedCount || 0)}/${Number(order.checkCount || 0)} Checks</span>
+      </div>
+    </div>
+  `);
+
+  renderOverviewList(els.customerOverviewDoneOrderList, doneOrders, "Keine abgeschlossenen Wartungen.", (order) => `
+    <div class="list-item clickable-list-item" role="button" tabindex="0" data-open-work-order="${order.id}" title="Abgeschlossene Wartung öffnen">
+      <strong>${escapeHtml(order.title)}</strong>
+      <div class="list-meta">
+        <span>${escapeHtml(order.assetName || "Ohne Objekt")}</span>
+        <span>fällig: ${formatDate(order.dueDate)}</span>
+        <span>erledigt: ${formatDate(order.completedAt)}</span>
+        <span>${Number(order.checkedCount || 0)}/${Number(order.checkCount || 0)} Checks</span>
+      </div>
+    </div>
+  `);
+}
+
+function resetCustomerOverview() {
+  els.customerOverviewPanel.hidden = true;
+  els.customerOverviewTitle.textContent = "Kunde";
+  els.customerOverviewSummary.textContent = "Keine Daten geladen.";
+  els.customerOverviewAssetList.innerHTML = "";
+  els.customerOverviewPlanList.innerHTML = "";
+  els.customerOverviewOpenOrderList.innerHTML = "";
+  els.customerOverviewDoneOrderList.innerHTML = "";
+}
+
 function getPropertyAddressLabel(building) {
   return formatAddressLabel(building.street, building.houseNumber, building.postalCode, building.city, building.country)
     || building.address;
@@ -2077,6 +2164,7 @@ function resetCustomerForm() {
   applyCustomerMaintenanceWeekdays();
   syncBillingAddressFields();
   els.customerSubmitButton.textContent = "Kunde speichern";
+  resetCustomerOverview();
 }
 
 function loadCustomerIntoForm(customer) {
@@ -2105,6 +2193,22 @@ function loadCustomerIntoForm(customer) {
   els.customerSubmitButton.textContent = "Änderungen speichern";
   setView("kunden", { updateHash: true, scrollTop: false });
   window.setTimeout(() => scrollToTarget("customerForm"), 0);
+}
+
+async function loadCustomerOverview(id) {
+  els.customerOverviewPanel.hidden = false;
+  els.customerOverviewTitle.textContent = "Kundenübersicht";
+  els.customerOverviewSummary.textContent = "Lade Daten...";
+  els.customerOverviewAssetList.innerHTML = '<div class="list-item">Lade Wartungsobjekte...</div>';
+  els.customerOverviewPlanList.innerHTML = '<div class="list-item">Lade Wartungen...</div>';
+  els.customerOverviewOpenOrderList.innerHTML = '<div class="list-item">Lade offene Aufträge...</div>';
+  els.customerOverviewDoneOrderList.innerHTML = '<div class="list-item">Lade abgeschlossene Wartungen...</div>';
+  renderCustomerOverview(await api(`/api/customers/${id}/overview`));
+}
+
+async function openCustomer(customer) {
+  loadCustomerIntoForm(customer);
+  await loadCustomerOverview(customer.id);
 }
 
 function getEmployeeFormPayload() {
@@ -2834,8 +2938,9 @@ function bindEvents() {
     if (editCustomer) {
       const customer = latestCustomers.find((item) => String(item.id) === String(editCustomer.dataset.editCustomer));
       if (customer) {
-        loadCustomerIntoForm(customer);
+        openCustomer(customer).catch((error) => showToast(error.message));
       }
+      return;
     }
 
     const editEmployee = event.target.closest("[data-edit-employee]");
@@ -2947,7 +3052,7 @@ function bindEvents() {
       event.preventDefault();
       const customer = latestCustomers.find((item) => String(item.id) === String(editCustomer.dataset.editCustomer));
       if (customer) {
-        loadCustomerIntoForm(customer);
+        openCustomer(customer).catch((error) => showToast(error.message));
       }
       return;
     }

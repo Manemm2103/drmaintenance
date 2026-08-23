@@ -302,6 +302,10 @@ app.get("/api/customers", asyncRoute(async (_req, res) => {
   res.json(await db.listCustomers());
 }));
 
+app.get("/api/customers/:id/overview", asyncRoute(async (req, res) => {
+  res.json(await db.getCustomerOverview(Number(req.params.id)));
+}));
+
 app.post("/api/customers", asyncRoute(async (req, res) => {
   const customer = await db.createCustomer(req.body);
   res.status(201).json(customer);

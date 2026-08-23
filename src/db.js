@@ -2465,6 +2465,7 @@ async function deleteCustomer(id) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
+    await connection.execute("UPDATE assets SET customer_id = NULL WHERE customer_id = ?", [id]);
     await connection.execute("UPDATE buildings SET customer_id = NULL WHERE customer_id = ?", [id]);
     await connection.execute("UPDATE apartments SET customer_id = NULL WHERE customer_id = ?", [id]);
     await connection.execute("DELETE FROM customers WHERE id = ?", [id]);
@@ -2481,6 +2482,99 @@ async function deleteCustomer(id) {
   }
 
   return { deleted: true };
+}
+
+async function getCustomerOverview(id) {
+  const customer = await getCustomerById(id);
+  if (!customer) {
+    throw createError("Kunde nicht gefunden.", 404);
+  }
+
+  const [assets] = await pool.execute(
+    `
+      SELECT
+        a.id,
+        a.name,
+        a.asset_type AS assetType,
+        a.location,
+        a.serial_number AS serialNumber,
+        a.qr_code AS qrCode,
+        a.criticality,
+        a.maintenance_interval_days AS maintenanceIntervalDays,
+        DATE_FORMAT(a.next_due_on, '%Y-%m-%d') AS nextDueOn,
+        (SELECT COUNT(*) FROM asset_checks ac WHERE ac.asset_id = a.id) AS checkCount
+      FROM assets a
+      LEFT JOIN buildings b ON b.id = a.building_id
+      LEFT JOIN apartments ap ON ap.id = a.apartment_id
+      LEFT JOIN buildings apb ON apb.id = ap.building_id
+      WHERE COALESCE(a.customer_id, ap.customer_id, apb.customer_id, b.customer_id) = ?
+      ORDER BY a.name ASC
+    `,
+    [id]
+  );
+
+  const [maintenancePlans] = await pool.execute(
+    `
+      SELECT
+        mp.id,
+        COALESCE(mp.target_id, mp.asset_id) AS assetId,
+        mp.title,
+        mp.interval_days AS intervalDays,
+        DATE_FORMAT(mp.next_due_on, '%Y-%m-%d') AS nextDueOn,
+        mp.active,
+        a.name AS assetName,
+        a.location AS assetLocation,
+        CONCAT(employee.first_name, ' ', employee.last_name) AS employeeName
+      FROM maintenance_plans mp
+      INNER JOIN assets a ON a.id = COALESCE(mp.target_id, mp.asset_id)
+      LEFT JOIN buildings b ON b.id = a.building_id
+      LEFT JOIN apartments ap ON ap.id = a.apartment_id
+      LEFT JOIN buildings apb ON apb.id = ap.building_id
+      LEFT JOIN employees employee ON employee.id = mp.employee_id
+      WHERE mp.active = TRUE
+        AND COALESCE(mp.target_type, 'asset') = 'asset'
+        AND COALESCE(a.customer_id, ap.customer_id, apb.customer_id, b.customer_id) = ?
+      ORDER BY mp.next_due_on ASC, a.name ASC
+    `,
+    [id]
+  );
+
+  const [workOrders] = await pool.execute(
+    `
+      SELECT
+        wo.id,
+        wo.asset_id AS assetId,
+        wo.title,
+        wo.description,
+        wo.priority,
+        wo.status,
+        DATE_FORMAT(wo.due_date, '%Y-%m-%d') AS dueDate,
+        wo.completed_at AS completedAt,
+        a.name AS assetName,
+        a.location AS assetLocation,
+        (SELECT COUNT(*) FROM work_order_checks woc WHERE woc.work_order_id = wo.id) AS checkCount,
+        (SELECT COUNT(*) FROM work_order_checks woc WHERE woc.work_order_id = wo.id AND woc.checked = TRUE) AS checkedCount
+      FROM work_orders wo
+      INNER JOIN assets a ON a.id = wo.asset_id
+      LEFT JOIN buildings b ON b.id = a.building_id
+      LEFT JOIN apartments ap ON ap.id = a.apartment_id
+      LEFT JOIN buildings apb ON apb.id = ap.building_id
+      WHERE COALESCE(a.customer_id, ap.customer_id, apb.customer_id, b.customer_id) = ?
+      ORDER BY
+        CASE WHEN wo.status = 'done' THEN 1 ELSE 0 END ASC,
+        wo.due_date ASC,
+        FIELD(wo.priority, 'critical', 'high', 'medium', 'low') ASC,
+        wo.created_at DESC
+    `,
+    [id]
+  );
+
+  return {
+    customer,
+    assets,
+    maintenancePlans,
+    workOrders
+  };
 }
 
 async function listProperties() {
@@ -4253,6 +4347,7 @@ module.exports = {
   createCustomer,
   updateCustomer,
   deleteCustomer,
+  getCustomerOverview,
   listProperties,
   createBuilding,
   updateBuilding,
