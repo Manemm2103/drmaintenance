@@ -21,10 +21,10 @@
         <nav class="nav">
           <a href="#dashboard" class="active" data-view-link="dashboard" data-nav-key="dashboard">Dashboard</a>
           <a href="#kalender" data-view-link="dashboard" data-nav-key="kalender" data-scroll-target="kalender">Kalender</a>
-          <a href="#auftraege" data-view-link="auftraege">Aufträge</a>
           <a href="#kunden" data-view-link="kunden">Kunden</a>
           <a href="#wartungsobjekte" data-view-link="wartungsobjekte">Objekte</a>
           <a href="#planung" data-view-link="planung">Wartungspläne</a>
+          <a href="#auftraege" data-view-link="auftraege">Aufträge</a>
           <a href="#mitarbeiter" data-view-link="mitarbeiter">Mitarbeiter</a>
           <a href="#stammdaten" data-view-link="stammdaten">Stammdaten</a>
         </nav>
@@ -369,6 +369,7 @@
                     <p class="eyebrow">Kundenübersicht</p>
                     <h3 id="customerOverviewTitle">Kunde</h3>
                   </div>
+                  <button class="ghost-button" type="button" id="customerOverviewAddAssetButton" disabled>Objekt hinzufügen</button>
                   <span id="customerOverviewSummary" class="muted">Keine Daten geladen.</span>
                 </div>
                 <div class="customer-overview-grid">
@@ -584,8 +585,8 @@
           <article class="panel wide" id="auftraege">
             <div class="panel-header">
               <div>
-                <p class="eyebrow">Aufträge</p>
-                <h2>Auftragsliste</h2>
+                <p class="eyebrow">Arbeitsliste</p>
+                <h2>Wartungsaufträge</h2>
               </div>
               <button class="ghost-button" type="button" id="workOrderRefreshButton">Aktualisieren</button>
             </div>
@@ -612,11 +613,11 @@
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Bearbeitung</p>
-                <h2>Auftrag öffnen</h2>
+                <h2>Auftrag bearbeiten</h2>
               </div>
             </div>
             <div class="detail-empty" id="workOrderDetailEmpty">
-              Einen Auftrag anklicken, um Checks abzuarbeiten oder Details zu ändern.
+              Kein Auftrag ausgewählt.
             </div>
             <form id="workOrderDetailForm" class="form-grid compact-form" hidden>
               <input name="workOrderId" id="workOrderIdInput" type="hidden">
@@ -656,8 +657,8 @@
               </label>
               <div class="span-2">
                 <div class="section-divider">
-                  <p class="eyebrow">Checks</p>
-                  <h3>Prüfungen abarbeiten</h3>
+                  <p class="eyebrow">Prüfung</p>
+                  <h3>Checkliste</h3>
                 </div>
                 <div class="check-list" id="workOrderCheckList"></div>
               </div>
@@ -740,14 +741,14 @@
               <div class="asset-check-builder span-2">
                 <div>
                   <p class="eyebrow">Wartung</p>
-                  <h3>Checkpunkte</h3>
+                  <h3>Prüfpunkte</h3>
                 </div>
                 <div class="inline-check-form">
                   <label>
-                    Neuer Checkpunkt
+                    Neuer Prüfpunkt
                     <input id="assetDraftCheckInput" placeholder="z.B. Filter ausbauen">
                   </label>
-                  <button class="ghost-button" type="button" id="assetDraftCheckAddButton">Check hinzufügen</button>
+                  <button class="ghost-button" type="button" id="assetDraftCheckAddButton">Hinzufügen</button>
                 </div>
                 <div class="check-list" id="assetDraftCheckList"></div>
               </div>

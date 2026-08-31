@@ -50,6 +50,7 @@ const els = {
   customerOverviewPlanList: document.querySelector("#customerOverviewPlanList"),
   customerOverviewOpenOrderList: document.querySelector("#customerOverviewOpenOrderList"),
   customerOverviewDoneOrderList: document.querySelector("#customerOverviewDoneOrderList"),
+  customerOverviewAddAssetButton: document.querySelector("#customerOverviewAddAssetButton"),
   employeeList: document.querySelector("#employeeList"),
   employeeFunctionList: document.querySelector("#employeeFunctionList"),
   buildingTypeList: document.querySelector("#buildingTypeList"),
@@ -425,10 +426,10 @@ const viewConfig = {
     scrollTarget: "customerForm"
   },
   auftraege: {
-    eyebrow: "Aufträge",
-    title: "Offene und fällige Aufträge bearbeiten.",
-    actionLabel: "Offene",
-    actionTitle: "Offene Aufträge anzeigen",
+    eyebrow: "Arbeitsliste",
+    title: "Wartungsaufträge abarbeiten.",
+    actionLabel: "Aufträge",
+    actionTitle: "Wartungsaufträge öffnen",
     actionView: "auftraege",
     scrollTarget: "auftraege"
   },
@@ -482,6 +483,7 @@ let latestPlans = [];
 let latestUserRoles = [];
 let latestWorkOrders = [];
 let activeWorkOrder = null;
+let activeCustomerOverviewId = null;
 let draftAssetCheckLabels = [];
 const searchableSelects = new Map();
 
@@ -1005,7 +1007,7 @@ function renderWorkOrders(workOrders) {
           <span>${formatDate(order.dueDate)}</span>
           <span>${statusLabels[order.status] || order.status}</span>
           <span>${priorityLabels[order.priority] || order.priority}</span>
-          <span>${checkCount > 0 ? `${checkedCount}/${checkCount} Checks` : "Keine Checks"}</span>
+          <span>${checkCount > 0 ? `${checkedCount}/${checkCount} Prüfpunkte` : "Keine Prüfpunkte"}</span>
         </div>
         ${order.description ? `<div class="muted">${escapeHtml(order.description)}</div>` : ""}
       </div>
@@ -1023,7 +1025,7 @@ function renderWorkOrderChecks(checks = []) {
   }
 
   if (checks.length === 0) {
-    els.workOrderCheckList.innerHTML = '<div class="list-item">Für dieses Objekt sind keine Checks hinterlegt.</div>';
+    els.workOrderCheckList.innerHTML = '<div class="list-item">Für dieses Objekt sind keine Prüfpunkte hinterlegt.</div>';
     return;
   }
 
@@ -1153,14 +1155,14 @@ function renderAssets(assets = latestAssets) {
 
 function renderDraftAssetChecks() {
   if (draftAssetCheckLabels.length === 0) {
-    els.assetDraftCheckList.innerHTML = '<div class="list-item">Noch keine neuen Checkpunkte vorbereitet.</div>';
+    els.assetDraftCheckList.innerHTML = '<div class="list-item">Noch keine neuen Prüfpunkte vorbereitet.</div>';
     return;
   }
 
   els.assetDraftCheckList.innerHTML = draftAssetCheckLabels.map((label, index) => `
     <div class="list-item list-item-with-actions">
       <strong>${escapeHtml(label)}</strong>
-      <button class="compact-button" type="button" title="Checkpunkt entfernen" aria-label="Checkpunkt entfernen" data-delete-draft-asset-check="${index}">X</button>
+      <button class="compact-button" type="button" title="Prüfpunkt entfernen" aria-label="Prüfpunkt entfernen" data-delete-draft-asset-check="${index}">X</button>
     </div>
   `).join("");
 }
@@ -1533,6 +1535,8 @@ function renderCustomerOverview(overview) {
   const doneOrders = workOrders.filter((order) => order.status === "done");
 
   els.customerOverviewPanel.hidden = false;
+  activeCustomerOverviewId = overview.customer.id;
+  els.customerOverviewAddAssetButton.disabled = false;
   els.customerOverviewTitle.textContent = formatCustomerLabel(overview.customer.customerNumber, overview.customer.name);
   els.customerOverviewSummary.textContent = `${assets.length} Objekte · ${plans.length} anstehend · ${openOrders.length} offen · ${doneOrders.length} abgeschlossen`;
 
@@ -1544,7 +1548,7 @@ function renderCustomerOverview(overview) {
         <span>${escapeHtml(asset.location || "Kein Standort")}</span>
         <span>alle ${Number(asset.maintenanceIntervalDays || 0)} Tage</span>
         <span>nächste Wartung: ${formatDate(asset.nextDueOn)}</span>
-        <span>${Number(asset.checkCount || 0)} Checks</span>
+        <span>${Number(asset.checkCount || 0)} Prüfpunkte</span>
       </div>
     </div>
   `);
@@ -1568,7 +1572,7 @@ function renderCustomerOverview(overview) {
         <span>${formatDate(order.dueDate)}</span>
         <span>${statusLabels[order.status] || order.status}</span>
         <span>${priorityLabels[order.priority] || order.priority}</span>
-        <span>${Number(order.checkedCount || 0)}/${Number(order.checkCount || 0)} Checks</span>
+        <span>${Number(order.checkedCount || 0)}/${Number(order.checkCount || 0)} Prüfpunkte</span>
       </div>
     </div>
   `);
@@ -1580,7 +1584,7 @@ function renderCustomerOverview(overview) {
         <span>${escapeHtml(order.assetName || "Ohne Objekt")}</span>
         <span>fällig: ${formatDate(order.dueDate)}</span>
         <span>erledigt: ${formatDate(order.completedAt)}</span>
-        <span>${Number(order.checkedCount || 0)}/${Number(order.checkCount || 0)} Checks</span>
+        <span>${Number(order.checkedCount || 0)}/${Number(order.checkCount || 0)} Prüfpunkte</span>
       </div>
     </div>
   `);
@@ -1588,6 +1592,8 @@ function renderCustomerOverview(overview) {
 
 function resetCustomerOverview() {
   els.customerOverviewPanel.hidden = true;
+  activeCustomerOverviewId = null;
+  els.customerOverviewAddAssetButton.disabled = true;
   els.customerOverviewTitle.textContent = "Kunde";
   els.customerOverviewSummary.textContent = "Keine Daten geladen.";
   els.customerOverviewAssetList.innerHTML = "";
@@ -2056,15 +2062,28 @@ function getAssetFormPayload() {
   };
 }
 
-function resetAssetForm() {
+function resetAssetForm(options = {}) {
+  const customerId = options.customerId !== undefined
+    ? String(options.customerId || "")
+    : (options.preserveCustomer ? els.assetCustomerSelect.value : "");
+
   els.assetForm.reset();
   els.assetIdInput.value = "";
+  els.assetForm.elements.customerId.value = customerId;
   els.assetForm.elements.maintenanceIntervalDays.value = 60;
   els.assetForm.elements.nextDueOn.value = toDateKey(new Date());
   setAssetInstructionsHtml("");
   resetDraftAssetChecks();
   syncSearchableSelect(els.assetCustomerSelect);
   els.assetSubmitButton.textContent = "Objekt speichern";
+}
+
+function prepareAssetFormForCustomer(customerId) {
+  resetAssetForm({ customerId });
+  const customer = latestCustomers.find((item) => String(item.id) === String(customerId));
+  setView("wartungsobjekte", { updateHash: true, scrollTop: false });
+  window.setTimeout(() => scrollToTarget("assetForm"), 0);
+  showToast(customer ? `Neues Objekt für ${customer.name} vorbereiten.` : "Neues Objekt vorbereiten.");
 }
 
 function loadAssetIntoForm(asset) {
@@ -2741,6 +2760,13 @@ function bindEvents() {
       addDraftAssetCheck();
     }
   });
+  els.customerOverviewAddAssetButton.addEventListener("click", () => {
+    if (!activeCustomerOverviewId) {
+      return;
+    }
+
+    prepareAssetFormForCustomer(activeCustomerOverviewId);
+  });
 
   els.planSearchInput.addEventListener("input", () => renderPlans(latestPlans));
   els.planEmployeeFilter.addEventListener("change", () => renderPlans(latestPlans));
@@ -3214,9 +3240,9 @@ function bindEvents() {
       })
     });
 
-    resetAssetForm();
-    showToast(isUpdate ? "Wartungsobjekt aktualisiert." : "Wartungsobjekt gespeichert.");
     await loadDashboard();
+    resetAssetForm(isUpdate ? {} : { customerId: data.customerId });
+    showToast(isUpdate ? "Wartungsobjekt aktualisiert." : "Wartungsobjekt gespeichert. Kunde bleibt ausgewählt.");
   });
 
   els.assetNewButton.addEventListener("click", resetAssetForm);

@@ -3690,7 +3690,7 @@ async function createAssetChecksFromLabels(assetId, labels, assetName) {
   if (insertedLabels.length > 0) {
     await pool.execute(
       "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
-      [assetId, `${insertedLabels.length} Checkpunkte am Wartungsobjekt "${assetName}" angelegt.`]
+      [assetId, `${insertedLabels.length} Prüfpunkte am Wartungsobjekt "${assetName}" angelegt.`]
     );
   }
 
@@ -3959,14 +3959,14 @@ async function createAssetCheck(assetId, input) {
 
   const label = normalizeText(input.label);
   if (!label) {
-    throw createError("Check ist ein Pflichtfeld.", 400);
+    throw createError("Prüfpunkt ist ein Pflichtfeld.", 400);
   }
 
   await insertAssetCheck(assetId, label);
 
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
-    [assetId, `Check "${label}" am Wartungsobjekt "${asset.name}" angelegt.`]
+    [assetId, `Prüfpunkt "${label}" am Wartungsobjekt "${asset.name}" angelegt.`]
   );
 
   return getAssetDetails(assetId);
@@ -3987,14 +3987,14 @@ async function deleteAssetCheck(id) {
     [id]
   );
   if (!check) {
-    throw createError("Check nicht gefunden.", 404);
+    throw createError("Prüfpunkt nicht gefunden.", 404);
   }
 
   await pool.execute("DELETE FROM asset_checks WHERE id = ?", [id]);
   await pool.execute("DELETE FROM work_order_checks WHERE asset_check_id = ? AND checked = FALSE", [id]);
   await pool.execute(
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('asset', ?, ?)",
-    [check.assetId, `Check "${check.label}" am Wartungsobjekt "${check.assetName}" gelöscht.`]
+    [check.assetId, `Prüfpunkt "${check.label}" am Wartungsobjekt "${check.assetName}" gelöscht.`]
   );
 
   return getAssetDetails(check.assetId);
@@ -4284,7 +4284,7 @@ async function updateWorkOrderCheck(workOrderId, checkId, checked) {
     [isChecked, isChecked, checkId, workOrderId]
   );
   if (result.affectedRows === 0) {
-    throw createError("Check nicht gefunden.", 404);
+    throw createError("Prüfpunkt nicht gefunden.", 404);
   }
 
   return getWorkOrderById(workOrderId);
