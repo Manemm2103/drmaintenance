@@ -16,6 +16,7 @@ const pool = mysql.createPool(databaseConfig);
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const regularSessionMs = 12 * 60 * 60 * 1000;
 const rememberSessionMs = 60 * 24 * 60 * 60 * 1000;
+const workOrderHorizonDays = 365;
 const customerMaintenanceWeekdayFields = [
   { key: "maintenanceMonday", column: "maintenance_monday", day: 1, defaultValue: true },
   { key: "maintenanceTuesday", column: "maintenance_tuesday", day: 2, defaultValue: true },
@@ -356,6 +357,7 @@ async function runMigrations() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS work_orders (
       id INT AUTO_INCREMENT PRIMARY KEY,
+      maintenance_plan_id INT NULL,
       asset_id INT NULL,
       title VARCHAR(180) NOT NULL,
       description TEXT NULL,
@@ -366,11 +368,16 @@ async function runMigrations() {
       created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
       CONSTRAINT fk_work_orders_asset FOREIGN KEY (asset_id) REFERENCES assets(id) ON DELETE SET NULL,
+      UNIQUE KEY uq_work_orders_plan_due (maintenance_plan_id, due_date),
+      INDEX idx_work_orders_plan (maintenance_plan_id),
       INDEX idx_work_orders_status (status),
       INDEX idx_work_orders_due (due_date),
       INDEX idx_work_orders_priority (priority)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
   `);
+  await pool.query("ALTER TABLE work_orders ADD COLUMN IF NOT EXISTS maintenance_plan_id INT NULL AFTER id");
+  await pool.query("ALTER TABLE work_orders ADD INDEX IF NOT EXISTS idx_work_orders_plan (maintenance_plan_id)");
+  await pool.query("ALTER TABLE work_orders ADD UNIQUE INDEX IF NOT EXISTS uq_work_orders_plan_due (maintenance_plan_id, due_date)");
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS work_order_checks (
@@ -876,6 +883,8 @@ async function normalizeGermanText() {
 }
 
 async function getDashboardSummary() {
+  await syncWorkOrdersFromMaintenancePlans();
+
   const settings = await getAppSettings();
   const [[summary]] = await pool.query(`
     SELECT
@@ -891,6 +900,7 @@ async function getDashboardSummary() {
   const [workOrders] = await pool.query(`
     SELECT
       wo.id,
+      wo.maintenance_plan_id AS maintenancePlanId,
       wo.title,
       wo.description,
       wo.priority,
@@ -2489,6 +2499,7 @@ async function getCustomerOverview(id) {
   if (!customer) {
     throw createError("Kunde nicht gefunden.", 404);
   }
+  await syncWorkOrdersFromMaintenancePlans();
 
   const [assets] = await pool.execute(
     `
@@ -2543,6 +2554,7 @@ async function getCustomerOverview(id) {
     `
       SELECT
         wo.id,
+        wo.maintenance_plan_id AS maintenancePlanId,
         wo.asset_id AS assetId,
         wo.title,
         wo.description,
@@ -4055,6 +4067,7 @@ async function getOpenWorkOrdersForAsset(assetId) {
     `
       SELECT
         wo.id,
+        wo.maintenance_plan_id AS maintenancePlanId,
         wo.title,
         wo.description,
         wo.priority,
@@ -4104,6 +4117,7 @@ async function getAssetDetails(id) {
   if (!asset) {
     throw createError("Wartungsobjekt nicht gefunden.", 404);
   }
+  await syncWorkOrdersFromMaintenancePlans();
 
   const openOrders = await getOpenWorkOrdersForAsset(id);
   await Promise.all(openOrders.map((order) => syncWorkOrderChecksFromAsset(order.id, id)));
@@ -4130,7 +4144,98 @@ async function getAssetDetailsByQrCode(qrCode) {
   return getAssetDetails(asset.id);
 }
 
+async function syncWorkOrdersFromMaintenancePlans() {
+  const settings = await getAppSettings();
+  const [occupiedRows] = await pool.query(`
+    SELECT DATE_FORMAT(due_date, '%Y-%m-%d') AS dueDate
+    FROM work_orders
+    WHERE status <> 'done'
+  `);
+  const occupiedDateKeys = new Set(occupiedRows.map((row) => row.dueDate).filter(Boolean));
+
+  const [plans] = await pool.query(`
+    SELECT
+      mp.id AS maintenancePlanId,
+      COALESCE(mp.target_id, mp.asset_id) AS assetId,
+      mp.title,
+      mp.instructions_html AS instructionsHtml,
+      mp.interval_days AS intervalDays,
+      DATE_FORMAT(mp.next_due_on, '%Y-%m-%d') AS nextDueOn,
+      a.name AS assetName,
+      a.instructions_html AS assetInstructionsHtml,
+      a.criticality AS priority,
+      ${getCustomerMaintenanceWeekdaySelect("c")}
+    FROM maintenance_plans mp
+    INNER JOIN assets a ON a.id = COALESCE(mp.target_id, mp.asset_id)
+    LEFT JOIN customers direct_customer ON direct_customer.id = a.customer_id
+    LEFT JOIN buildings b ON b.id = a.building_id
+    LEFT JOIN apartments ap ON ap.id = a.apartment_id
+    LEFT JOIN buildings apb ON apb.id = ap.building_id
+    LEFT JOIN customers c ON c.id = COALESCE(direct_customer.id, ap.customer_id, apb.customer_id, b.customer_id)
+    WHERE mp.active = TRUE
+      AND COALESCE(mp.target_type, 'asset') = 'asset'
+      AND COALESCE(mp.target_id, mp.asset_id) IS NOT NULL
+      AND mp.next_due_on <= DATE_ADD(CURDATE(), INTERVAL ${workOrderHorizonDays} DAY)
+      AND NOT EXISTS (
+        SELECT 1
+        FROM work_orders existing_order
+        WHERE existing_order.maintenance_plan_id = mp.id
+          AND existing_order.status <> 'done'
+      )
+    ORDER BY mp.next_due_on ASC, mp.id ASC
+  `);
+
+  let created = 0;
+  const validPriorities = new Set(["low", "medium", "high", "critical"]);
+  for (const plan of plans) {
+    const customerWeekdays = getCustomerMaintenanceWeekdaysFromRow(plan);
+    if (!hasAnyAllowedMaintenanceWeekday(settings, customerWeekdays)) {
+      continue;
+    }
+
+    const dueDate = findNextSpacedMaintenanceDate(
+      parseDateKey(plan.nextDueOn),
+      settings,
+      customerWeekdays,
+      occupiedDateKeys
+    );
+    const dueDateKey = formatDateKey(dueDate);
+    occupiedDateKeys.add(dueDateKey);
+
+    const title = normalizeText(plan.title) || normalizeText(plan.assetName) || "Wartung";
+    const description = normalizeText(plan.instructionsHtml) || normalizeText(plan.assetInstructionsHtml);
+    const priority = validPriorities.has(plan.priority) ? plan.priority : "medium";
+    const [result] = await pool.execute(
+      `
+        INSERT IGNORE INTO work_orders (maintenance_plan_id, asset_id, title, description, priority, status, due_date)
+        VALUES (?, ?, ?, ?, ?, 'open', ?)
+      `,
+      [
+        plan.maintenancePlanId,
+        plan.assetId,
+        title,
+        description,
+        priority,
+        dueDateKey
+      ]
+    );
+
+    if (result.affectedRows > 0) {
+      created += 1;
+      await syncWorkOrderChecksFromAsset(result.insertId, plan.assetId);
+      await pool.execute(
+        "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('work_order', ?, ?)",
+        [result.insertId, `Wartungsauftrag "${title}" automatisch angelegt.`]
+      );
+    }
+  }
+
+  return { created };
+}
+
 async function listWorkOrders(filter = "open") {
+  await syncWorkOrdersFromMaintenancePlans();
+
   const conditions = [];
   const allowedFilters = new Set(["open", "overdue", "done", "all"]);
   const activeFilter = allowedFilters.has(filter) ? filter : "open";
@@ -4148,6 +4253,7 @@ async function listWorkOrders(filter = "open") {
   const [rows] = await pool.query(`
     SELECT
       wo.id,
+      wo.maintenance_plan_id AS maintenancePlanId,
       wo.title,
       wo.description,
       wo.priority,
@@ -4208,6 +4314,7 @@ async function getWorkOrderById(id) {
     `
       SELECT
         wo.id,
+        wo.maintenance_plan_id AS maintenancePlanId,
         wo.title,
         wo.description,
         wo.priority,
@@ -4230,6 +4337,65 @@ async function getWorkOrderById(id) {
     ...row,
     checks: await listWorkOrderChecks(row.id)
   };
+}
+
+async function advanceMaintenancePlanAfterWorkOrderDone(workOrderId) {
+  const [[row]] = await pool.execute(
+    `
+      SELECT
+        wo.id,
+        wo.maintenance_plan_id AS maintenancePlanId,
+        wo.asset_id AS assetId,
+        wo.status,
+        DATE_FORMAT(wo.due_date, '%Y-%m-%d') AS dueDate,
+        mp.interval_days AS intervalDays,
+        DATE_FORMAT(mp.next_due_on, '%Y-%m-%d') AS planNextDueOn,
+        COALESCE(mp.target_type, 'asset') AS targetType,
+        COALESCE(mp.target_id, mp.asset_id) AS targetId,
+        mp.active
+      FROM work_orders wo
+      LEFT JOIN maintenance_plans mp ON mp.id = wo.maintenance_plan_id
+      WHERE wo.id = ?
+    `,
+    [workOrderId]
+  );
+
+  if (!row || row.status !== "done" || !row.maintenancePlanId || !row.active || !row.intervalDays || !row.dueDate) {
+    return null;
+  }
+
+  if (row.planNextDueOn && row.planNextDueOn > row.dueDate) {
+    return null;
+  }
+
+  const settings = await getAppSettings();
+  const customerWeekdays = await getCustomerMaintenanceWeekdaysForTarget(row.targetType, row.targetId);
+  if (!hasAnyAllowedMaintenanceWeekday(settings, customerWeekdays)) {
+    return null;
+  }
+
+  const intervalDays = Number(row.intervalDays);
+  let nextDueDate = addDays(parseDateKey(row.dueDate), intervalDays);
+  nextDueDate = adjustDateForWeekend(nextDueDate, settings, customerWeekdays);
+  const nextDueOn = formatDateKey(nextDueDate);
+
+  await pool.execute(
+    `
+      UPDATE maintenance_plans
+      SET last_done_on = CURDATE(), next_due_on = ?
+      WHERE id = ?
+    `,
+    [nextDueOn, row.maintenancePlanId]
+  );
+
+  if (row.assetId) {
+    await pool.execute(
+      "UPDATE assets SET maintenance_interval_days = ?, next_due_on = ? WHERE id = ?",
+      [intervalDays, nextDueOn, row.assetId]
+    );
+  }
+
+  return nextDueOn;
 }
 
 async function updateWorkOrder(id, input) {
@@ -4267,6 +4433,10 @@ async function updateWorkOrder(id, input) {
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('work_order', ?, ?)",
     [id, `Auftrag "${title}" aktualisiert.`]
   );
+
+  if (status === "done") {
+    await advanceMaintenancePlanAfterWorkOrderDone(id);
+  }
 
   return getWorkOrderById(id);
 }
@@ -4306,6 +4476,10 @@ async function updateWorkOrderStatus(id, status) {
     "INSERT INTO activity_log (entity_type, entity_id, message) VALUES ('work_order', ?, ?)",
     [id, `Auftragsstatus auf "${status}" gesetzt.`]
   );
+
+  if (status === "done") {
+    await advanceMaintenancePlanAfterWorkOrderDone(id);
+  }
 
   return getWorkOrderById(id);
 }

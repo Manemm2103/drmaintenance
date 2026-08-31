@@ -47,7 +47,7 @@ Kunden, Wartungsobjekte und Wartungspläne werden jeweils unter den Formularen g
 
 In den Stammdaten kann ein ausgehender CalDAV-Sync aktiviert werden. Hinterlegt werden Kalender-URL, Benutzername, Passwort und ein Sync-Intervall in Minuten. DR Maintenance schreibt die sichtbaren Wartungstermine der nächsten 365 Tage als CalDAV/iCalendar-Einträge in den externen Kalender; externe Kalenderänderungen werden noch nicht zurück importiert.
 
-Aufträge sind die Arbeitsliste für fällige Wartungen. Standardmäßig werden offene Aufträge angezeigt; über den Filter können überfällige, erledigte oder alle Aufträge geladen werden. Ein Klick auf einen Auftrag öffnet die Bearbeitung, damit Status, Fälligkeit, Beschreibung und die enthaltenen Prüfpunkte abgearbeitet werden können. Die alte Schnell-Erfassung im Dashboard wurde entfernt.
+Aufträge sind die Arbeitsliste für fällige Wartungen. Aus aktiven Wartungsplänen wird automatisch je ein offener Wartungsauftrag erzeugt; beim Erledigen rückt der Wartungsplan anhand seines Intervalls auf den nächsten Termin weiter. Standardmäßig werden offene Aufträge angezeigt; über den Filter können überfällige, erledigte oder alle Aufträge geladen werden. Ein Klick auf einen Auftrag öffnet die Bearbeitung, damit Status, Fälligkeit, Beschreibung und die enthaltenen Prüfpunkte abgearbeitet werden können. Die alte Schnell-Erfassung im Dashboard wurde entfernt.
 
 Mitarbeiternummern werden automatisch fortlaufend im Format `M0001`, `M0002` usw. vergeben und können bei Bedarf geändert werden. Mitarbeiterfunktionen werden in den Stammdaten gepflegt und anschließend Mitarbeitern zugewiesen. Benutzer und Benutzerrollen werden ebenfalls in den Stammdaten gepflegt; die Systemrollen `admin` und `customer`/`Kunde` werden initial angelegt und können nicht gelöscht werden.
 
@@ -125,6 +125,5 @@ Die App-Version steht im Format `yyyy.mm.dd.xx`, zum Beispiel `2026.08.11.02`. D
 
 - Berechtigungen je Benutzerrolle
 - Detailseiten für Gebäude, Appartments und Wartungsobjekte
-- wiederkehrende Wartungsaufträge automatisch aus Plänen erzeugen
 - Ersatzteile, Lieferanten und Kosten
 - Benachrichtigungen
