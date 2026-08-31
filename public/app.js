@@ -1059,7 +1059,6 @@ function getAssetAddressLabel(asset) {
 function getAssetSearchText(asset) {
   return [
     asset.name,
-    asset.assetType,
     asset.location,
     asset.serialNumber,
     asset.qrCode,
@@ -1135,7 +1134,6 @@ function renderAssets(assets = latestAssets) {
         <strong>${escapeHtml(asset.name)}</strong>
         <div class="list-meta">
           <span>${escapeHtml(formatCustomerLabel(asset.customerNumber, asset.customerName))}</span>
-          <span>${escapeHtml(asset.assetType)}</span>
           <span>${escapeHtml(asset.location)}</span>
           <span>alle ${Number(asset.maintenanceIntervalDays || 0)} Tage</span>
           <span>nächste Wartung: ${formatDate(asset.nextDueOn)}</span>
@@ -1544,7 +1542,6 @@ function renderCustomerOverview(overview) {
     <div class="list-item clickable-list-item" role="button" tabindex="0" data-edit-asset="${asset.id}" title="Wartungsobjekt öffnen">
       <strong>${escapeHtml(asset.name)}</strong>
       <div class="list-meta">
-        <span>${escapeHtml(asset.assetType || "Kein Typ")}</span>
         <span>${escapeHtml(asset.location || "Kein Standort")}</span>
         <span>alle ${Number(asset.maintenanceIntervalDays || 0)} Tage</span>
         <span>nächste Wartung: ${formatDate(asset.nextDueOn)}</span>
@@ -2049,7 +2046,6 @@ function getAssetFormPayload() {
   return {
     id: data.assetId ? Number(data.assetId) : null,
     name: data.name,
-    assetType: data.assetType,
     location: data.location,
     serialNumber: data.serialNumber,
     qrCode: data.qrCode,
@@ -2089,7 +2085,6 @@ function prepareAssetFormForCustomer(customerId) {
 function loadAssetIntoForm(asset) {
   els.assetForm.elements.assetId.value = asset.id;
   els.assetForm.elements.name.value = asset.name || "";
-  els.assetForm.elements.assetType.value = asset.assetType || "";
   els.assetForm.elements.location.value = asset.location || "";
   els.assetForm.elements.serialNumber.value = asset.serialNumber || "";
   els.assetForm.elements.qrCode.value = asset.qrCode || "";
@@ -3227,7 +3222,6 @@ function bindEvents() {
       method: isUpdate ? "PATCH" : "POST",
       body: JSON.stringify({
         name: data.name,
-        assetType: data.assetType,
         location: data.location,
         serialNumber: data.serialNumber,
         qrCode: data.qrCode,

@@ -409,13 +409,13 @@ app.get("/api/assets/:id/details", asyncRoute(async (req, res) => {
 }));
 
 app.post("/api/assets", asyncRoute(async (req, res) => {
-  requireFields(req.body, ["customerId", "name", "assetType", "location", "maintenanceIntervalDays", "nextDueOn"]);
+  requireFields(req.body, ["customerId", "name", "location", "maintenanceIntervalDays", "nextDueOn"]);
   const asset = await db.createAsset(req.body);
   res.status(201).json(asset);
 }));
 
 app.patch("/api/assets/:id", asyncRoute(async (req, res) => {
-  requireFields(req.body, ["customerId", "name", "assetType", "location", "maintenanceIntervalDays", "nextDueOn"]);
+  requireFields(req.body, ["customerId", "name", "location", "maintenanceIntervalDays", "nextDueOn"]);
   res.json(await db.updateAsset(Number(req.params.id), req.body));
 }));
 

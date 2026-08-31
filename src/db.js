@@ -3563,7 +3563,7 @@ async function listAssets() {
 
 function normalizeAssetInput(input) {
   const name = input.name?.trim();
-  const assetType = input.assetType?.trim();
+  const assetType = normalizeText(input.assetType) || "Wartungsobjekt";
   const location = input.location?.trim();
   const serialNumber = input.serialNumber?.trim() || null;
   const qrCode = input.qrCode?.trim() || null;
@@ -3574,8 +3574,8 @@ function normalizeAssetInput(input) {
   const nextDueOn = normalizeText(input.nextDueOn);
   const allowedCriticalities = new Set(["low", "medium", "high", "critical"]);
 
-  if (!customerId || !name || !assetType || !location || !maintenanceIntervalDays || !nextDueOn) {
-    throw createError("Kunde, Name, Typ, Standort, Intervall und nächste Fälligkeit sind Pflichtfelder.", 400);
+  if (!customerId || !name || !location || !maintenanceIntervalDays || !nextDueOn) {
+    throw createError("Kunde, Name, Standort, Intervall und nächste Fälligkeit sind Pflichtfelder.", 400);
   }
 
   if (!allowedCriticalities.has(criticality)) {
