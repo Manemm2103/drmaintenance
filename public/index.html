@@ -110,128 +110,132 @@
             <div class="panel-header">
               <div>
                 <p class="eyebrow">Stammdaten</p>
-                <h2>Einstellungen</h2>
+                <h2>Stammdaten</h2>
               </div>
             </div>
-            <form id="appSettingsForm" class="form-grid compact-form">
-              <label class="check-row span-2">
-                <input name="skipSaturdaysForMaintenance" id="skipSaturdaysForMaintenanceInput" type="checkbox">
-                Samstag nicht als Arbeitstag im Wartungsplan berücksichtigen
-              </label>
-              <label class="check-row span-2">
-                <input name="skipSundaysForMaintenance" id="skipSundaysForMaintenanceInput" type="checkbox">
-                Sonntag nicht als Arbeitstag im Wartungsplan berücksichtigen
-              </label>
-              <label class="check-row span-2">
-                <input name="caldavEnabled" id="caldavEnabledInput" type="checkbox">
-                CalDAV-Sync aktivieren
-              </label>
-              <label class="span-2">
-                CalDAV Kalender-URL
-                <input name="caldavCalendarUrl" id="caldavCalendarUrlInput" placeholder="https://example.com/remote.php/dav/calendars/user/wartung/">
-              </label>
-              <label>
-                CalDAV Benutzername
-                <input name="caldavUsername" id="caldavUsernameInput" autocomplete="username">
-              </label>
-              <label>
-                CalDAV Passwort
-                <input name="caldavPassword" id="caldavPasswordInput" type="password" autocomplete="new-password" placeholder="leer lassen = unverändert">
-              </label>
-              <label>
-                Sync-Intervall in Minuten
-                <input name="caldavSyncIntervalMinutes" id="caldavSyncIntervalMinutesInput" type="number" min="1" value="60">
-              </label>
-              <div class="caldav-status span-2">
-                <span id="caldavLastSyncStatus">Noch nicht synchronisiert.</span>
-                <button class="ghost-button" type="button" id="caldavSyncNowButton">Jetzt synchronisieren</button>
-              </div>
-              <button class="primary-button span-2" type="submit">Stammdaten speichern</button>
-            </form>
-            <div class="section-divider" hidden>
-              <p class="eyebrow">Gebäude</p>
-              <h3>Typen</h3>
+            <div class="masterdata-tabs" role="tablist" aria-label="Stammdatenbereiche">
+              <button class="masterdata-tab is-active" type="button" role="tab" aria-selected="true" data-masterdata-tab="settings">Einstellungen</button>
+              <button class="masterdata-tab" type="button" role="tab" aria-selected="false" data-masterdata-tab="employees">Mitarbeiter</button>
+              <button class="masterdata-tab" type="button" role="tab" aria-selected="false" data-masterdata-tab="users">Benutzer & Rollen</button>
             </div>
-            <form id="buildingTypeForm" class="form-grid compact-form" hidden>
-              <input type="hidden" name="typeKey" id="buildingTypeKeyInput">
-              <label>
-                Gebäudetyp
-                <input name="name" placeholder="z.B. Hotel" required>
-              </label>
-              <div class="form-actions">
-                <button class="primary-button" type="submit" id="buildingTypeSubmitButton">Typ speichern</button>
-                <button class="ghost-button" type="button" id="buildingTypeNewButton">Neu</button>
+
+            <div class="masterdata-panel is-active" data-masterdata-panel="settings">
+              <div class="section-divider">
+                <p class="eyebrow">System</p>
+                <h3>Einstellungen</h3>
               </div>
-            </form>
-            <div class="user-list" id="buildingTypeList" hidden></div>
-            <div class="section-divider">
-              <p class="eyebrow">Mitarbeiter</p>
-              <h3>Funktionen</h3>
-            </div>
-            <form id="employeeFunctionForm" class="form-grid compact-form">
-              <input type="hidden" name="employeeFunctionId" id="employeeFunctionIdInput">
-              <label>
-                Funktion
-                <input name="name" placeholder="z.B. Techniker" required>
-              </label>
-              <label>
-                Notizen
-                <input name="notes" placeholder="optional">
-              </label>
-              <div class="form-actions span-2">
-                <button class="primary-button" type="submit" id="employeeFunctionSubmitButton">Funktion speichern</button>
-                <button class="ghost-button" type="button" id="employeeFunctionNewButton">Neu</button>
-              </div>
-            </form>
-            <div class="user-list" id="employeeFunctionList"></div>
-            <div class="section-divider">
-              <p class="eyebrow">Administration</p>
-              <h3>Benutzer</h3>
-            </div>
-            <div class="users-layout">
-              <form id="userForm" class="form-grid">
-                <label>
-                  Benutzername
-                  <input name="username" placeholder="z.B. max" autocomplete="username" required>
+              <form id="appSettingsForm" class="form-grid compact-form">
+                <label class="check-row span-2">
+                  <input name="skipSaturdaysForMaintenance" id="skipSaturdaysForMaintenanceInput" type="checkbox">
+                  Samstag nicht als Arbeitstag im Wartungsplan berücksichtigen
                 </label>
-                <label>
-                  Anzeigename
-                  <input name="displayName" placeholder="Max Mustermann" required>
+                <label class="check-row span-2">
+                  <input name="skipSundaysForMaintenance" id="skipSundaysForMaintenanceInput" type="checkbox">
+                  Sonntag nicht als Arbeitstag im Wartungsplan berücksichtigen
                 </label>
-                <label>
-                  E-Mail
-                  <input name="email" type="email" placeholder="max@example.com">
-                </label>
-                <label>
-                  Rolle
-                  <select name="role" id="userRoleSelect" required>
-                    <option value="customer">Kunde</option>
-                    <option value="admin">Admin</option>
-                  </select>
+                <label class="check-row span-2">
+                  <input name="caldavEnabled" id="caldavEnabledInput" type="checkbox">
+                  CalDAV-Sync aktivieren
                 </label>
                 <label class="span-2">
-                  Initiales Passwort
-                  <input name="password" type="password" autocomplete="new-password" required>
+                  CalDAV Kalender-URL
+                  <input name="caldavCalendarUrl" id="caldavCalendarUrlInput" placeholder="https://example.com/remote.php/dav/calendars/user/wartung/">
                 </label>
-                <button class="primary-button span-2" type="submit">Benutzer anlegen</button>
-              </form>
-              <div class="user-list" id="userList"></div>
-              <div class="section-divider">
-                <p class="eyebrow">Login</p>
-                <h3>Rollen</h3>
-              </div>
-              <form id="userRoleForm" class="form-grid compact-form">
-                <input type="hidden" name="roleKey" id="userRoleKeyInput">
                 <label>
-                  Rollenname
-                  <input name="name" placeholder="z.B. Objektverwalter" required>
+                  CalDAV Benutzername
+                  <input name="caldavUsername" id="caldavUsernameInput" autocomplete="username">
                 </label>
-                <div class="form-actions">
-                  <button class="primary-button" type="submit" id="userRoleSubmitButton">Rolle speichern</button>
-                  <button class="ghost-button" type="button" id="userRoleNewButton">Neu</button>
+                <label>
+                  CalDAV Passwort
+                  <input name="caldavPassword" id="caldavPasswordInput" type="password" autocomplete="new-password" placeholder="leer lassen = unverändert">
+                </label>
+                <label>
+                  Sync-Intervall in Minuten
+                  <input name="caldavSyncIntervalMinutes" id="caldavSyncIntervalMinutesInput" type="number" min="1" value="60">
+                </label>
+                <div class="caldav-status span-2">
+                  <span id="caldavLastSyncStatus">Noch nicht synchronisiert.</span>
+                  <button class="ghost-button" type="button" id="caldavSyncNowButton">Jetzt synchronisieren</button>
                 </div>
+                <button class="primary-button span-2" type="submit">Stammdaten speichern</button>
               </form>
-              <div class="user-list" id="userRoleList"></div>
+            </div>
+
+            <div class="masterdata-panel" data-masterdata-panel="employees" hidden>
+              <div class="section-divider">
+                <p class="eyebrow">Mitarbeiter</p>
+                <h3>Funktionen</h3>
+              </div>
+              <div class="masterdata-columns">
+                <form id="employeeFunctionForm" class="form-grid compact-form">
+                  <input type="hidden" name="employeeFunctionId" id="employeeFunctionIdInput">
+                  <label>
+                    Funktion
+                    <input name="name" placeholder="z.B. Techniker" required>
+                  </label>
+                  <label>
+                    Notizen
+                    <input name="notes" placeholder="optional">
+                  </label>
+                  <div class="form-actions span-2">
+                    <button class="primary-button" type="submit" id="employeeFunctionSubmitButton">Funktion speichern</button>
+                    <button class="ghost-button" type="button" id="employeeFunctionNewButton">Neu</button>
+                  </div>
+                </form>
+                <div class="user-list" id="employeeFunctionList"></div>
+              </div>
+            </div>
+
+            <div class="masterdata-panel" data-masterdata-panel="users" hidden>
+              <div class="section-divider">
+                <p class="eyebrow">Administration</p>
+                <h3>Benutzer & Rollen</h3>
+              </div>
+              <div class="masterdata-columns">
+                <div class="users-layout">
+                  <form id="userForm" class="form-grid">
+                    <label>
+                      Benutzername
+                      <input name="username" placeholder="z.B. max" autocomplete="username" required>
+                    </label>
+                    <label>
+                      Anzeigename
+                      <input name="displayName" placeholder="Max Mustermann" required>
+                    </label>
+                    <label>
+                      E-Mail
+                      <input name="email" type="email" placeholder="max@example.com">
+                    </label>
+                    <label>
+                      Rolle
+                      <select name="role" id="userRoleSelect" required>
+                        <option value="customer">Kunde</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </label>
+                    <label class="span-2">
+                      Initiales Passwort
+                      <input name="password" type="password" autocomplete="new-password" required>
+                    </label>
+                    <button class="primary-button span-2" type="submit">Benutzer anlegen</button>
+                  </form>
+                  <div class="user-list" id="userList"></div>
+                </div>
+                <div class="users-layout">
+                  <form id="userRoleForm" class="form-grid compact-form">
+                    <input type="hidden" name="roleKey" id="userRoleKeyInput">
+                    <label>
+                      Rollenname
+                      <input name="name" placeholder="z.B. Objektverwalter" required>
+                    </label>
+                    <div class="form-actions">
+                      <button class="primary-button" type="submit" id="userRoleSubmitButton">Rolle speichern</button>
+                      <button class="ghost-button" type="button" id="userRoleNewButton">Neu</button>
+                    </div>
+                  </form>
+                  <div class="user-list" id="userRoleList"></div>
+                </div>
+              </div>
             </div>
           </article>
           </section>

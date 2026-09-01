@@ -924,6 +924,55 @@ textarea {
   gap: 18px;
 }
 
+.masterdata-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 18px;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #f3f3f0;
+}
+
+.masterdata-tab {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--radius) - 2px);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.masterdata-tab:hover,
+.masterdata-tab:focus-visible,
+.masterdata-tab.is-active {
+  border-color: var(--text);
+  outline: none;
+  background: var(--text);
+  color: var(--paper);
+}
+
+.masterdata-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.masterdata-panel[hidden] {
+  display: none;
+}
+
+.masterdata-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
 .property-layout {
   display: grid;
   gap: 18px;
@@ -1170,6 +1219,7 @@ textarea {
   .asset-filter-bar,
   .inline-check-form,
   .users-layout,
+  .masterdata-columns,
   .property-forms {
     grid-template-columns: 1fr;
   }

@@ -39,6 +39,8 @@ Ohne Login wird nur die Anmeldeseite ausgeliefert. Mit dem Haken `Angemeldet ble
 
 ## Stammdaten-Workflow
 
+Der Stammdatenbereich ist in die Bereiche Einstellungen, Mitarbeiter sowie Benutzer & Rollen gegliedert. Gebäudetypen werden dort nicht mehr gepflegt, weil Geräte bzw. Wartungsobjekte im aktuellen Workflow direkt Kunden zugeordnet werden.
+
 Der Workflow startet bei einem Kunden. Beim Anlegen vergibt DR Maintenance automatisch die nächste Kundennummer im Format `C0000154`, `C0000155` usw.; die Nummer kann in den Stammdaten geändert werden. Vorname und Name werden getrennt gepflegt, ebenso Straße, Hausnummer, PLZ, Ort und Land. Wenn die Rechnungsadresse abweicht, können RE-Empfänger, RE-Straße, RE-Hausnummer, RE-PLZ, RE-Ort und RE-Land separat erfasst werden. Danach werden Geräte bzw. Wartungsobjekte wie Klimaanlage oder Dampfbad direkt einem Kunden zugeordnet. Aus der Kundenübersicht kann direkt ein neues Objekt für den geöffneten Kunden vorbereitet werden; beim Speichern neuer Objekte bleibt der Kunde für die nächste Erfassung ausgewählt. Am Gerät werden Intervall in Tagen und nächste Wartung gepflegt; daraus hält DR Maintenance automatisch den zugehörigen Wartungsplan für Kalender und Aufträge aktuell.
 
 Verknüpfte Felder wie Kunde, Geräteauswahl, Mitarbeiter und Wartungsobjekt sind als durchsuchbare Auswahlfelder umgesetzt. Der Kundenfilter bei Wartungsobjekten ist ebenfalls als Live-Suche umgesetzt. Auch Länderfelder sind als vorbefüllte Dropdowns mit Live-Suche umgesetzt, z.B. kann `Österreich` vorgetippt und direkt ausgewählt werden. Beim Tippen wird die Ergebnisliste live eingeschränkt; gespeichert wird weiterhin die eindeutige interne ID bzw. beim Land der Ländername.

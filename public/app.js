@@ -51,9 +51,10 @@ const els = {
   customerOverviewOpenOrderList: document.querySelector("#customerOverviewOpenOrderList"),
   customerOverviewDoneOrderList: document.querySelector("#customerOverviewDoneOrderList"),
   customerOverviewAddAssetButton: document.querySelector("#customerOverviewAddAssetButton"),
+  masterdataTabs: document.querySelectorAll("[data-masterdata-tab]"),
+  masterdataPanels: document.querySelectorAll("[data-masterdata-panel]"),
   employeeList: document.querySelector("#employeeList"),
   employeeFunctionList: document.querySelector("#employeeFunctionList"),
-  buildingTypeList: document.querySelector("#buildingTypeList"),
   userList: document.querySelector("#userList"),
   userRoleList: document.querySelector("#userRoleList"),
   propertyList: document.querySelector("#propertyList"),
@@ -120,10 +121,6 @@ const els = {
   employeeFunctionIdInput: document.querySelector("#employeeFunctionIdInput"),
   employeeFunctionSubmitButton: document.querySelector("#employeeFunctionSubmitButton"),
   employeeFunctionNewButton: document.querySelector("#employeeFunctionNewButton"),
-  buildingTypeForm: document.querySelector("#buildingTypeForm"),
-  buildingTypeKeyInput: document.querySelector("#buildingTypeKeyInput"),
-  buildingTypeSubmitButton: document.querySelector("#buildingTypeSubmitButton"),
-  buildingTypeNewButton: document.querySelector("#buildingTypeNewButton"),
   appSettingsForm: document.querySelector("#appSettingsForm"),
   skipSaturdaysForMaintenanceInput: document.querySelector("#skipSaturdaysForMaintenanceInput"),
   skipSundaysForMaintenanceInput: document.querySelector("#skipSundaysForMaintenanceInput"),
@@ -895,6 +892,24 @@ function setView(viewName, options = {}) {
   }
 }
 
+function setMasterdataTab(tabName) {
+  const nextTab = Array.from(els.masterdataTabs).some((tab) => tab.dataset.masterdataTab === tabName)
+    ? tabName
+    : "settings";
+
+  els.masterdataTabs.forEach((tab) => {
+    const isActive = tab.dataset.masterdataTab === nextTab;
+    tab.classList.toggle("is-active", isActive);
+    tab.setAttribute("aria-selected", String(isActive));
+  });
+
+  els.masterdataPanels.forEach((panel) => {
+    const isActive = panel.dataset.masterdataPanel === nextTab;
+    panel.classList.toggle("is-active", isActive);
+    panel.hidden = !isActive;
+  });
+}
+
 function showViewFromHash() {
   const hash = decodeURIComponent(window.location.hash.replace(/^#/, ""));
   const viewName = hashViewMap[hash] || "dashboard";
@@ -954,7 +969,6 @@ function renderSummary(payload) {
   renderCustomers(customers);
   renderEmployees(employees);
   renderEmployeeFunctions(employeeFunctions);
-  renderBuildingTypes(buildingTypes);
   renderUsers(users);
   renderUserRoles(userRoles);
   renderCustomerOptions(customers);
@@ -1353,32 +1367,6 @@ function renderEmployeeFunctions(employeeFunctions) {
       </div>
       <div class="user-actions">
         <button class="compact-button" type="button" title="Funktion löschen" aria-label="Funktion löschen" data-delete-employee-function="${employeeFunction.id}">X</button>
-      </div>
-    </div>
-  `).join("");
-}
-
-function renderBuildingTypes(buildingTypes) {
-  if (!buildingTypes || buildingTypes.length === 0) {
-    els.buildingTypeList.innerHTML = '<div class="list-item">Keine Gebäudetypen angelegt.</div>';
-    return;
-  }
-
-  els.buildingTypeList.innerHTML = buildingTypes.map((buildingType) => `
-    <div class="user-item clickable-list-item" role="button" tabindex="0" data-edit-building-type="${escapeHtml(buildingType.typeKey)}" title="Gebäudetyp bearbeiten">
-      <div>
-        <strong>${escapeHtml(buildingType.name)}</strong>
-        <div class="list-meta">
-          <span>${escapeHtml(buildingType.typeKey)}</span>
-          <span>${Number(buildingType.buildingCount || 0)} Gebäude</span>
-          <span>${Number(buildingType.isSystem) === 1 || buildingType.isSystem === true ? "Standardtyp" : "Eigener Typ"}</span>
-        </div>
-      </div>
-      <div class="user-actions">
-        ${Number(buildingType.isSystem) === 1 || buildingType.isSystem === true
-          ? '<span class="system-note">geschützt</span>'
-          : `<button class="compact-button" type="button" title="Gebäudetyp löschen" aria-label="Gebäudetyp löschen" data-delete-building-type="${escapeHtml(buildingType.typeKey)}">X</button>`
-        }
       </div>
     </div>
   `).join("");
@@ -2275,22 +2263,9 @@ function loadEmployeeFunctionIntoForm(employeeFunction) {
   els.employeeFunctionForm.elements.name.value = employeeFunction.name || "";
   els.employeeFunctionForm.elements.notes.value = employeeFunction.notes || "";
   els.employeeFunctionSubmitButton.textContent = "Änderungen speichern";
+  setMasterdataTab("employees");
   setView("stammdaten", { updateHash: true, scrollTop: false });
   window.setTimeout(() => scrollToTarget("employeeFunctionForm"), 0);
-}
-
-function resetBuildingTypeForm() {
-  els.buildingTypeForm.reset();
-  els.buildingTypeKeyInput.value = "";
-  els.buildingTypeSubmitButton.textContent = "Typ speichern";
-}
-
-function loadBuildingTypeIntoForm(buildingType) {
-  els.buildingTypeForm.elements.typeKey.value = buildingType.typeKey || "";
-  els.buildingTypeForm.elements.name.value = buildingType.name || "";
-  els.buildingTypeSubmitButton.textContent = "Änderungen speichern";
-  setView("stammdaten", { updateHash: true, scrollTop: false });
-  window.setTimeout(() => scrollToTarget("buildingTypeForm"), 0);
 }
 
 function resetUserRoleForm() {
@@ -2303,6 +2278,7 @@ function loadUserRoleIntoForm(role) {
   els.userRoleForm.elements.roleKey.value = role.roleKey || "";
   els.userRoleForm.elements.name.value = role.name || "";
   els.userRoleSubmitButton.textContent = "Änderungen speichern";
+  setMasterdataTab("users");
   setView("stammdaten", { updateHash: true, scrollTop: false });
   window.setTimeout(() => scrollToTarget("userRoleForm"), 0);
 }
@@ -2572,18 +2548,6 @@ async function deleteEmployeeFunction(id) {
   await loadDashboard();
 }
 
-async function deleteBuildingType(typeKey) {
-  if (!window.confirm("Gebäudetyp wirklich löschen? Das geht nur, wenn er keinem Gebäude zugewiesen ist.")) {
-    return;
-  }
-
-  await api(`/api/building-types/${encodeURIComponent(typeKey)}`, {
-    method: "DELETE"
-  });
-  showToast("Gebäudetyp gelöscht.");
-  await loadDashboard();
-}
-
 async function deleteUserRole(roleKey) {
   if (!window.confirm("Rolle wirklich löschen? Admin und Kunde sind geschützt.")) {
     return;
@@ -2713,6 +2677,12 @@ function bindEvents() {
       if (link.dataset.scrollTarget) {
         window.setTimeout(() => scrollToTarget(link.dataset.scrollTarget), 0);
       }
+    });
+  });
+
+  els.masterdataTabs.forEach((tab) => {
+    tab.addEventListener("click", () => {
+      setMasterdataTab(tab.dataset.masterdataTab);
     });
   });
 
@@ -2888,13 +2858,6 @@ function bindEvents() {
       return;
     }
 
-    const deleteBuildingTypeButton = event.target.closest("[data-delete-building-type]");
-    if (deleteBuildingTypeButton) {
-      event.stopPropagation();
-      deleteBuildingType(deleteBuildingTypeButton.dataset.deleteBuildingType).catch((error) => showToast(error.message));
-      return;
-    }
-
     const deleteUserRoleButton = event.target.closest("[data-delete-user-role]");
     if (deleteUserRoleButton) {
       event.stopPropagation();
@@ -2978,15 +2941,6 @@ function bindEvents() {
       const employeeFunction = latestEmployeeFunctions.find((item) => String(item.id) === String(editEmployeeFunction.dataset.editEmployeeFunction));
       if (employeeFunction) {
         loadEmployeeFunctionIntoForm(employeeFunction);
-      }
-      return;
-    }
-
-    const editBuildingType = event.target.closest("[data-edit-building-type]");
-    if (editBuildingType) {
-      const buildingType = latestBuildingTypes.find((item) => item.typeKey === editBuildingType.dataset.editBuildingType);
-      if (buildingType) {
-        loadBuildingTypeIntoForm(buildingType);
       }
       return;
     }
@@ -3094,16 +3048,6 @@ function bindEvents() {
       const employeeFunction = latestEmployeeFunctions.find((item) => String(item.id) === String(editEmployeeFunction.dataset.editEmployeeFunction));
       if (employeeFunction) {
         loadEmployeeFunctionIntoForm(employeeFunction);
-      }
-      return;
-    }
-
-    const editBuildingType = event.target.closest("[data-edit-building-type]");
-    if (editBuildingType) {
-      event.preventDefault();
-      const buildingType = latestBuildingTypes.find((item) => item.typeKey === editBuildingType.dataset.editBuildingType);
-      if (buildingType) {
-        loadBuildingTypeIntoForm(buildingType);
       }
       return;
     }
@@ -3410,25 +3354,6 @@ function bindEvents() {
   });
 
   els.employeeFunctionNewButton.addEventListener("click", resetEmployeeFunctionForm);
-
-  els.buildingTypeForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const data = Object.fromEntries(new FormData(els.buildingTypeForm));
-    const isUpdate = Boolean(data.typeKey);
-
-    await api(isUpdate ? `/api/building-types/${encodeURIComponent(data.typeKey)}` : "/api/building-types", {
-      method: isUpdate ? "PATCH" : "POST",
-      body: JSON.stringify({
-        name: data.name
-      })
-    });
-
-    resetBuildingTypeForm();
-    showToast(isUpdate ? "Gebäudetyp aktualisiert." : "Gebäudetyp angelegt.");
-    await loadDashboard();
-  });
-
-  els.buildingTypeNewButton.addEventListener("click", resetBuildingTypeForm);
 
   els.appSettingsForm.addEventListener("submit", async (event) => {
     event.preventDefault();
