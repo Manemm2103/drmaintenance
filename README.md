@@ -39,7 +39,7 @@ Ohne Login wird nur die Anmeldeseite ausgeliefert. Mit dem Haken `Angemeldet ble
 
 ## Stammdaten-Workflow
 
-Der Stammdatenbereich ist in die Bereiche Einstellungen, Mitarbeiter sowie Benutzer & Rollen gegliedert. Gebäudetypen werden dort nicht mehr gepflegt, weil Geräte bzw. Wartungsobjekte im aktuellen Workflow direkt Kunden zugeordnet werden.
+Der Stammdatenbereich ist in die Bereiche Einstellungen, Mitarbeiter sowie Benutzer & Rollen gegliedert. Einstellungen sind zusätzlich in Allgemein/Arbeitstage und Kalender/CalDAV-Sync unterteilt. Gebäudetypen werden dort nicht mehr gepflegt, weil Geräte bzw. Wartungsobjekte im aktuellen Workflow direkt Kunden zugeordnet werden.
 
 Der Workflow startet bei einem Kunden. Beim Anlegen vergibt DR Maintenance automatisch die nächste Kundennummer im Format `C0000154`, `C0000155` usw.; die Nummer kann in den Stammdaten geändert werden. Vorname und Name werden getrennt gepflegt, ebenso Straße, Hausnummer, PLZ, Ort und Land. Wenn die Rechnungsadresse abweicht, können RE-Empfänger, RE-Straße, RE-Hausnummer, RE-PLZ, RE-Ort und RE-Land separat erfasst werden. Danach werden Geräte bzw. Wartungsobjekte wie Klimaanlage oder Dampfbad direkt einem Kunden zugeordnet. Aus der Kundenübersicht kann direkt ein neues Objekt für den geöffneten Kunden vorbereitet werden; beim Speichern neuer Objekte bleibt der Kunde für die nächste Erfassung ausgewählt. Am Gerät werden Intervall in Tagen und nächste Wartung gepflegt; daraus hält DR Maintenance automatisch den zugehörigen Wartungsplan für Kalender und Aufträge aktuell.
 
@@ -51,7 +51,7 @@ In den Stammdaten kann ein ausgehender CalDAV-Sync aktiviert werden. Hinterlegt 
 
 Aufträge sind die Arbeitsliste für fällige Wartungen. Aus aktiven Wartungsplänen wird automatisch je ein offener Wartungsauftrag erzeugt; beim Erledigen rückt der Wartungsplan anhand seines Intervalls auf den nächsten Termin weiter. Standardmäßig werden offene Aufträge angezeigt; über den Filter können überfällige, erledigte oder alle Aufträge geladen werden. Ein Klick auf einen Auftrag öffnet die Bearbeitung, damit Status, Fälligkeit, Beschreibung und die enthaltenen Prüfpunkte abgearbeitet werden können. Die alte Schnell-Erfassung im Dashboard wurde entfernt.
 
-Mitarbeiternummern werden automatisch fortlaufend im Format `M0001`, `M0002` usw. vergeben und können bei Bedarf geändert werden. Mitarbeiterfunktionen werden in den Stammdaten gepflegt und anschließend Mitarbeitern zugewiesen. Benutzer und Benutzerrollen werden ebenfalls in den Stammdaten gepflegt; die Systemrollen `admin` und `customer`/`Kunde` werden initial angelegt und können nicht gelöscht werden.
+Mitarbeiternummern werden automatisch fortlaufend im Format `M0001`, `M0002` usw. vergeben und können bei Bedarf geändert werden. Mitarbeiter und Mitarbeiterfunktionen werden unter `Stammdaten -> Mitarbeiter` gepflegt; Funktionen können anschließend Mitarbeitern zugewiesen werden. Benutzer und Benutzerrollen werden ebenfalls in den Stammdaten gepflegt; die Systemrollen `admin` und `customer`/`Kunde` werden initial angelegt und können nicht gelöscht werden.
 
 ## Container
 

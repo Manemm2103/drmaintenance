@@ -445,14 +445,6 @@ const viewConfig = {
     actionTitle: "Neuen Wartungsplan erfassen",
     actionView: "planung",
     scrollTarget: "new-maintenance"
-  },
-  mitarbeiter: {
-    eyebrow: "Team",
-    title: "Mitarbeiter verwalten.",
-    actionLabel: "Mitarbeiter",
-    actionTitle: "Neuen Mitarbeiter anlegen",
-    actionView: "mitarbeiter",
-    scrollTarget: "employeeForm"
   }
 };
 
@@ -465,7 +457,7 @@ const hashViewMap = {
   wartungsobjekte: "wartungsobjekte",
   planung: "planung",
   "new-maintenance": "planung",
-  mitarbeiter: "mitarbeiter",
+  mitarbeiter: "stammdaten",
   benutzer: "stammdaten"
 };
 
@@ -915,6 +907,12 @@ function showViewFromHash() {
   const viewName = hashViewMap[hash] || "dashboard";
   const activeNav = hash === "kalender" ? "kalender" : viewName;
   setView(viewName, { updateHash: false, scrollTop: false, activeNav });
+
+  if (hash === "mitarbeiter") {
+    setMasterdataTab("employees");
+    window.setTimeout(() => scrollToTarget("employeeForm"), 0);
+    return;
+  }
 
   if (hash && hash !== viewName && hashViewMap[hash]) {
     window.setTimeout(() => scrollToTarget(hash), 0);
@@ -2248,7 +2246,8 @@ function loadEmployeeIntoForm(employee) {
   els.employeeForm.elements.notes.value = employee.notes || "";
   syncSearchableSelect(els.employeeFunctionSelect);
   els.employeeSubmitButton.textContent = "Änderungen speichern";
-  setView("mitarbeiter", { updateHash: true, scrollTop: false });
+  setMasterdataTab("employees");
+  setView("stammdaten", { updateHash: true, scrollTop: false });
   window.setTimeout(() => scrollToTarget("employeeForm"), 0);
 }
 
